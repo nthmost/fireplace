@@ -155,6 +155,7 @@ window.addEventListener("keydown", (e) => {
   if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
   if (e.key === "ArrowLeft") cycle(-1);
   else if (e.key === "ArrowRight") cycle(1);
+  else if (e.key === "f" || e.key === "F") toggleFullscreen();
 });
 
 // ---- control panel ---------------------------------------------------------
@@ -189,6 +190,23 @@ el("pause").addEventListener("click", (e) => {
 el("toggle-panel").addEventListener("click", () => {
   el("panel").classList.toggle("collapsed");
 });
+
+// ---- fullscreen: just the fire, filling the screen ------------------------
+draw.fill = false;
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    (document.documentElement.requestFullscreen?.() ?? Promise.reject()).catch(() => {});
+  } else {
+    document.exitFullscreen?.();
+  }
+}
+document.addEventListener("fullscreenchange", () => {
+  const on = !!document.fullscreenElement;
+  document.body.classList.toggle("fs", on);
+  draw.fill = on;                               // box hugs the edges in fullscreen
+  requestAnimationFrame(() => { dims = sizeCanvas(); });
+});
+el("fullscreen").addEventListener("click", toggleFullscreen);
 
 // Boot: if a live backend is answering /api/progress, mirror the real torrent;
 // otherwise fall back to the simulated demo. Same page, both modes.

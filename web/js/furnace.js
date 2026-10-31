@@ -85,8 +85,11 @@ export function draw(ctx, p, frame, W, H) {
   ctx.fillStyle = "#0a0604";
   ctx.fillRect(0, 0, W, H);
 
-  // Furnace geometry.
-  const fx = W * 0.14, fy = H * 0.1, fw = W * 0.72, fh = H * 0.82;
+  // Furnace geometry. In fill (fullscreen) mode the box hugs the edges so the
+  // fire nearly fills its containing square; otherwise it sits inset on the page.
+  const mx = draw.fill ? 0.03 : 0.14;
+  const my = draw.fill ? 0.03 : 0.1;
+  const fx = W * mx, fy = H * my, fw = W * (1 - 2 * mx), fh = H * (1 - 2 * my);
   const cx = W / 2;
 
   const glowY = fy + fh * 0.78;
