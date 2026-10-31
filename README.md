@@ -53,6 +53,27 @@ python3 -m fireplace --name "big-linux-iso.torrent" --size 4.7
 
 Press `Ctrl-C` to bail out (the terminal is restored cleanly).
 
+## Real torrents (Transmission)
+
+Point the TUI at a running [Transmission](https://transmissionbt.com/) daemon and
+the same furnace burns on live data — no simulation:
+
+```shell
+export TR_RPC_USER=myuser TR_RPC_PASS=mypass
+python3 -m fireplace --transmission HOST[:PORT]        # e.g. nas.local or nas.local:9091
+python3 -m fireplace --transmission nas.local --torrent "ubuntu"   # pick by id or name
+```
+
+Credentials come from `--rpc-user/--rpc-pass` or the `TR_RPC_USER`/`TR_RPC_PASS`
+env vars (never hard-code them). With no `--torrent`, it auto-picks the liveliest
+download. It runs as a **live monitor** — it keeps burning (even through
+completion/seeding) until you `Ctrl-C`.
+
+The fuel (heat) counts **every source feeding you** — BitTorrent seeders *and*
+HTTP webseeds (`peersSendingToUs + webseedsSendingToUs`), so archive.org-style
+webseed torrents still light the fire. `TransmissionSource` is just another
+`poll()` — the furnace and TUI are unchanged.
+
 ## Web
 
 A vanilla-JS canvas port of the same fire model lives in [`web/`](web/) — no build
@@ -98,15 +119,17 @@ the numbers came from.**
 | **Renderer** (pure `(progress, frame) → pixels`) | `fireplace/furnace.py` | `web/js/furnace.js` |
 | **Loop** (display-specific) | `fireplace/tui.py` | `web/js/app.js` |
 
-Today the source is a `SimulatedSource`. A real torrent client is the same
-interface — see the roadmap.
+The TUI ships two sources — `SimulatedSource` and `TransmissionSource` — and the
+renderer can't tell them apart. New backends (qBittorrent, a web endpoint) just
+add another `poll()`.
 
 ## Roadmap
 
 - [x] **Phase 1** — TUI furnace, simulated progress
 - [x] **Phase 2** — web version at [fireplace.nthmost.com](https://fireplace.nthmost.com), simulated
-- [ ] **Phase 3** — real torrent sources: `TransmissionSource`, `QBittorrentSource`,
-      … — each just implements `poll()`
+- [x] **Phase 3** — real torrents via `TransmissionSource` (BitTorrent + webseed fuel)
+- [ ] more sources (`QBittorrentSource`, …) and a web backend so the live site can
+      mirror a real client — each just implements `poll()`
 
 ## License
 

@@ -11,8 +11,12 @@ The renderer never knows (or cares) where the numbers came from.
 
 from __future__ import annotations
 
+import base64
+import json
 import math
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 
 
@@ -116,3 +120,142 @@ class SimulatedSource(ProgressSource):
             peers=peers,
             state=state,
         )
+
+
+class TransmissionSource(ProgressSource):
+    """A real torrent, read from a Transmission daemon over its RPC API.
+
+    Implements the same ``poll() -> Progress`` contract as SimulatedSource, so
+    the furnace and the TUI don't change at all — this is Phase 3.
+
+    Mapping into the fire's axes:
+      * ``percentDone``       → fraction (flame width/height arc + coal bed)
+      * ``rateDownload``      → rate_bps (flame height = speed)
+      * ``peersSendingToUs``  → peers    (seeders = the fuel = heat)
+
+    Transmission's RPC needs a session-id handshake (first call 409s with the
+    ``X-Transmission-Session-Id`` header, which is echoed back thereafter) and
+    HTTP Basic auth. Results are cached for ``refresh`` seconds so the animation
+    can run at a high frame rate without hammering the daemon — the flames keep
+    flickering (frame-driven) while the numbers update about once a second.
+    """
+
+    FIELDS = ["id", "name", "percentDone", "rateDownload", "sizeWhenDone",
+              "peersSendingToUs", "webseedsSendingToUs", "peersConnected", "status"]
+    # Transmission status codes → our state vocabulary.
+    _STATUS = {0: "paused", 1: "stalled", 2: "stalled", 3: "stalled",
+               4: "active", 5: "stalled", 6: "done"}
+
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 9091,
+        username: str = "",
+        password: str = "",
+        torrent: int | str | None = None,  # id, name-substring, or None=auto-pick
+        refresh: float = 1.0,
+    ):
+        self.url = f"http://{host}:{port}/transmission/rpc"
+        self._auth = "Basic " + base64.b64encode(
+            f"{username}:{password}".encode()
+        ).decode()
+        self.torrent = torrent
+        self.refresh = max(0.2, refresh)
+        self._sid = ""
+        self._last_rpc = 0.0
+        self._cache: Progress | None = None
+        self._rate_ema = 0.0
+        self._peers_ema = 0.0
+
+    def _call(self, body: dict) -> dict:
+        data = json.dumps(body).encode()
+        for attempt in (0, 1):  # retry once to pick up a fresh session id
+            req = urllib.request.Request(
+                self.url,
+                data=data,
+                headers={
+                    "Authorization": self._auth,
+                    "X-Transmission-Session-Id": self._sid,
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    return json.load(r)
+            except urllib.error.HTTPError as e:
+                if e.code == 409 and attempt == 0:
+                    self._sid = e.headers.get("X-Transmission-Session-Id", "")
+                    continue
+                raise
+        raise RuntimeError("transmission rpc: session handshake failed")
+
+    def _select(self, torrents: list[dict]) -> dict | None:
+        if not torrents:
+            return None
+        want = self.torrent
+        if isinstance(want, int) or (isinstance(want, str) and want.isdigit()):
+            wid = int(want)
+            for t in torrents:
+                if t["id"] == wid:
+                    return t
+        if isinstance(want, str) and want:
+            for t in torrents:
+                if want.lower() in t["name"].lower():
+                    return t
+        # Auto: the liveliest download, else the least-complete, else the first.
+        downloading = [t for t in torrents if t["status"] == 4]
+        if downloading:
+            return max(downloading, key=lambda t: t["rateDownload"])
+        incomplete = [t for t in torrents if t["percentDone"] < 1.0]
+        if incomplete:
+            return min(incomplete, key=lambda t: t["percentDone"])
+        return torrents[0]
+
+    def poll(self) -> Progress:
+        now = time.monotonic()
+        if self._cache is not None and now - self._last_rpc < self.refresh:
+            return self._cache  # serve cache; the fire animates on the frame clock
+
+        try:
+            out = self._call({"method": "torrent-get",
+                              "arguments": {"fields": self.FIELDS}})
+            t = self._select(out["arguments"]["torrents"])
+        except Exception:
+            # Don't crash the fire on a transient network hiccup — keep the last
+            # frame, or show a cold, stalled hearth if we never connected.
+            if self._cache is not None:
+                return self._cache
+            return Progress(fraction=0.0, name="(transmission unreachable)",
+                            state="stalled")
+
+        self._last_rpc = now
+        if t is None:
+            self._cache = Progress(fraction=0.0, name="(no torrents)",
+                                   state="stalled")
+            return self._cache
+
+        frac = float(t["percentDone"])
+        rate = float(t["rateDownload"])
+        # "Fuel" = every source actively feeding us: BitTorrent seeders AND HTTP
+        # webseeds (archive.org-style torrents are often pure webseed, 0 peers).
+        peers = float(t["peersSendingToUs"] + t.get("webseedsSendingToUs", 0))
+        first = self._cache is None
+        # Light smoothing so flame height / heat drift rather than snap each tick.
+        self._rate_ema = rate if first else 0.6 * self._rate_ema + 0.4 * rate
+        self._peers_ema = peers if first else 0.7 * self._peers_ema + 0.3 * peers
+
+        done = frac >= 1.0 or t["status"] == 6
+        state = "done" if done else self._STATUS.get(t["status"], "stalled")
+        if state == "active" and self._rate_ema < 1:
+            state = "stalled"
+
+        self._cache = Progress(
+            fraction=min(1.0, frac),
+            rate_bps=0.0 if done else self._rate_ema,
+            downloaded=int(frac * t["sizeWhenDone"]),
+            total=int(t["sizeWhenDone"]),
+            name=t["name"],
+            peers=0 if done else int(round(self._peers_ema)),
+            state=state,
+        )
+        return self._cache

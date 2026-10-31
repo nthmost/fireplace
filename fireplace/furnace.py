@@ -280,12 +280,15 @@ def render(p: Progress, frame: int) -> list[str]:
     # Readout
     pct = f"{p.percent:5.1f}%"
     bar = _bar(22, p.fraction)
+    seeders = f"{p.peers} seeder{'' if p.peers == 1 else 's'}"
     if done:
         status = f"{fg(118)}✓ complete — seeding{RESET}"
+    elif p.state == "paused":
+        status = f"{fg(244)}⏸ paused{RESET} {gd}· {seeders}{RESET}"
     elif p.state == "stalled":
         status = f"{fg(244)}… connecting to peers{RESET}"
     else:
-        status = f"{fg(214)}{_human_bytes(p.rate_bps)}/s{RESET} {gd}· {p.peers} seeders{RESET}"
+        status = f"{fg(214)}{_human_bytes(p.rate_bps)}/s{RESET} {gd}· {seeders}{RESET}"
     lines.append(f"  {BOLD}{fg(220)}{pct}{RESET}  {bar}")
     size = f"{_human_bytes(p.downloaded)} / {_human_bytes(p.total)}"
     lines.append(f"  {gd}{size}{RESET}   {status}")
