@@ -33,6 +33,12 @@ function hash01(n) {
 }
 const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(r * arr.length)))];
 
+// Rising sparks — a particle layer that lives across frames (unlike the rest of
+// the stateless renderer). Embers lift off the flame tips, drift, cool, and fade;
+// more of them the harder the fire burns.
+const sparks = [];
+const MAX_SPARKS = 420;
+
 function humanBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
@@ -139,6 +145,46 @@ export function draw(ctx, p, frame, W, H) {
       ctx.fillRect(Math.floor(px), Math.floor(py), Math.ceil(cell) - 1, Math.ceil(ch) - 1);
     }
   }
+
+  // ---- Rising sparks -------------------------------------------------------
+  // Spawn off the flame tips — denser the hotter/faster it burns; none once done.
+  const litCols = [];
+  for (let x = 0; x < FW; x++) if (colRows[x] > 0.6) litCols.push(x);
+  if (!done && litCols.length) {
+    const rate = vigor * (0.4 + 0.6 * heat) * 2.4;    // avg new sparks per frame
+    let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
+    for (; n > 0 && sparks.length < MAX_SPARKS; n--) {
+      const cx = litCols[(Math.random() * litCols.length) | 0];
+      sparks.push({
+        x: areaX + cx * cell + cell / 2,
+        y: baseY - colRows[cx] * cell - cell * 0.5,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: -(0.5 + Math.random() * 1.3),            // rise
+        life: 1,
+        decay: 0.010 + Math.random() * 0.02,
+        size: Math.random() < 0.22 ? 2 : 1,
+        hue: Math.random(),                           // rare blue/green ember
+      });
+    }
+  }
+  // Update + draw (newest spawns are hottest; they cool to deep red as they fade).
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    s.vy *= 0.985;                                     // slow as it rises
+    s.vx += (Math.random() - 0.5) * 0.06;             // wander
+    s.life -= s.decay;
+    if (s.life <= 0 || s.y < fy + 2) { sparks.splice(i, 1); continue; }
+    let c;
+    if (s.hue < 0.04) c = pick(FLARE_BLUE, 0.4 + s.life * 0.5);
+    else if (s.hue < 0.06) c = pick(FLARE_GREEN, 0.4 + s.life * 0.5);
+    else c = pick(FIRE, 0.45 + 0.55 * s.life);        // bright → ember as it ages
+    ctx.globalAlpha = Math.min(1, s.life * 1.3);
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.round(s.x), Math.round(s.y), s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
 
   // ---- Coal bed: widens with % complete, lingers hot ----------------------
   const coalActive = coalFrac * FW;
