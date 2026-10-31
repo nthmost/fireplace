@@ -81,6 +81,13 @@ step, no framework. Open `web/index.html` directly, or serve the folder:
 cd web && python3 -m http.server 8000      # then open http://localhost:8000
 ```
 
+### Controls
+
+- **⛶ / `f`** — fullscreen: hides all chrome and fills the screen with just the
+  fire, centred as a square (`Esc` or `f` to exit)
+- **‹ / ›** or **← / →** — cycle torrents (live mode, >1 torrent)
+- **⚙** — the config panel (simulated mode only; hidden when mirroring a torrent)
+
 ### Config vars
 
 Set them via **URL query params** (shareable) or the in-page **⚙ control panel**:
