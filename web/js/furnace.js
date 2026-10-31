@@ -78,20 +78,13 @@ export function draw(ctx, p, frame, W, H) {
   ctx.save();
   roundRect(ctx, fx, fy, fw, fh, 6); ctx.clip();
 
-  // ---- Smelting row: [ore] ━━▶ [ingot] -------------------------------------
-  const rowY = fy + fh * 0.085, slot = Math.min(34, fw * 0.08);
-  drawSlot(ctx, fx + fw * 0.06, rowY, slot, "#8a5a2b", "◆");
-  const aX = fx + fw * 0.06 + slot + 14;
-  const aW = fw - (fw * 0.06) * 2 - slot * 2 - 28;
-  drawArrow(ctx, aX, rowY + slot / 2, aW, p.fraction);
-  drawSlot(ctx, fx + fw - fw * 0.06 - slot, rowY,
-           slot, done ? "#d7d7af" : STONE_DARK, done ? "▣" : "");
-
   // ---- Fire grid -----------------------------------------------------------
+  // (Progress is read from the fire + the bar below; the old smelting arrow was
+  // redundant, so the flames now claim that top space.)
   const areaX = fx + fw * 0.08;
   const areaW = fw * 0.84;
   const baseY = fy + fh * 0.84;           // top of the coal bed
-  const areaTop = fy + fh * 0.26;
+  const areaTop = fy + fh * 0.1;          // flames start near the top of the box
   const cell = Math.max(5, areaW / 72);
   const FW = Math.floor(areaW / cell);
   const FH = Math.max(6, Math.floor((baseY - areaTop) / cell));
@@ -181,37 +174,6 @@ export function draw(ctx, p, frame, W, H) {
 }
 
 // ---- drawing helpers -------------------------------------------------------
-
-function drawSlot(ctx, x, y, s, iconColor, glyph) {
-  roundRect(ctx, x, y, s, s, 4);
-  ctx.fillStyle = "#0d0906"; ctx.fill();
-  roundRect(ctx, x, y, s, s, 4);
-  ctx.lineWidth = 2; ctx.strokeStyle = STONE; ctx.stroke();
-  if (glyph) {
-    ctx.fillStyle = iconColor;
-    ctx.font = `${Math.floor(s * 0.6)}px monospace`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(glyph, x + s / 2, y + s / 2 + 1);
-  }
-}
-
-function drawArrow(ctx, x, y, w, frac) {
-  const h = 10, filled = Math.max(0, Math.min(1, frac)) * (w - 12);
-  roundRect(ctx, x, y - h / 2, w - 12, h, 3);
-  ctx.fillStyle = STONE_DARK; ctx.fill();
-  if (filled > 0) {
-    roundRect(ctx, x, y - h / 2, filled, h, 3);
-    ctx.fillStyle = "#ffaf00"; ctx.fill();
-  }
-  // arrowhead
-  ctx.beginPath();
-  ctx.moveTo(x + w - 12, y - h);
-  ctx.lineTo(x + w, y);
-  ctx.lineTo(x + w - 12, y + h);
-  ctx.closePath();
-  ctx.fillStyle = frac > 0 ? "#ffd700" : STONE_DARK;
-  ctx.fill();
-}
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
