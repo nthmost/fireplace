@@ -215,9 +215,10 @@ def _bar(width: int, frac: float) -> str:
 INNER = 36  # inner width of the furnace box
 
 # Width ratchet: a fire spreads but never contracts — the flame holds the widest
-# it has ever grown for the current torrent (height still tracks live speed).
-# Reset when the torrent changes or restarts (see render()).
+# it has ever grown for the current torrent (height still tracks live speed). It
+# eases outward (never snaps) and never recedes. Reset on torrent change/restart.
 _SPREAD = {"key": None, "frac": 0.0, "peak": 0.0}
+_SPREAD_EASE = 0.03  # how fast the fire creeps wider (smaller = slower)
 
 
 def render(p: Progress, frame: int) -> list[str]:
@@ -271,7 +272,11 @@ def render(p: Progress, frame: int) -> list[str]:
         _SPREAD.update(key=p.name, frac=p.fraction, peak=0.0)
     _SPREAD["frac"] = p.fraction
     if not done:
-        _SPREAD["peak"] = max(_SPREAD["peak"], vigor)
+        # ease toward current vigor, but never recede (max keeps it a ratchet)
+        _SPREAD["peak"] = max(
+            _SPREAD["peak"],
+            _SPREAD["peak"] + (vigor - _SPREAD["peak"]) * _SPREAD_EASE,
+        )
     width_frac = _SPREAD["peak"]
 
     # Coals accumulate with progress and keep a warm afterglow once it's done.

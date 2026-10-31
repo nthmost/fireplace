@@ -41,8 +41,10 @@ const MAX_SPARKS = 420;
 
 // Width ratchet: a fire spreads across its fuel and holds that width even as it
 // dies down — so the flame's *width* only ever grows for a given torrent (height
-// still tracks live speed). Reset when the torrent changes or restarts.
+// still tracks live speed). It eases outward (never snaps) and never contracts.
+// Reset when the torrent changes or restarts.
 let fireSpread = { key: null, frac: 0, peak: 0 };
+const SPREAD_EASE = 0.03;   // how fast the fire creeps wider (smaller = slower)
 
 function humanBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -68,7 +70,13 @@ export function draw(ctx, p, frame, W, H) {
     sparks.length = 0;                       // fresh fire for a new torrent
   }
   fireSpread.frac = p.fraction;
-  if (!done) fireSpread.peak = Math.max(fireSpread.peak, vigor);
+  if (!done) {
+    // ease toward the current vigor, but never recede (max keeps it a ratchet)
+    fireSpread.peak = Math.max(
+      fireSpread.peak,
+      fireSpread.peak + (vigor - fireSpread.peak) * SPREAD_EASE
+    );
+  }
   const widthFrac = fireSpread.peak;         // flame width = widest it's ever been
 
   ctx.clearRect(0, 0, W, H);

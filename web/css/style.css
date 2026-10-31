@@ -23,24 +23,6 @@ main {
   text-align: center;
 }
 
-h1 {
-  font-size: clamp(18px, 4.5vw, 30px);
-  letter-spacing: 0.12em;
-  color: #ffcf6b;
-  text-shadow: 0 0 18px rgba(255, 135, 0, 0.45);
-  margin: 6px 0 2px;
-}
-
-.tagline { color: var(--dim); margin: 0 0 18px; font-size: 13px; }
-
-/* LIVE badge — shown only when the page is mirroring a real torrent backend */
-.live-badge { display: none; }
-body.live .live-badge {
-  display: inline-block; margin-left: 10px; font-size: 0.5em; vertical-align: middle;
-  color: #87ff5f; letter-spacing: 0.1em; text-shadow: 0 0 10px rgba(135, 255, 95, 0.6);
-  animation: live-pulse 1.8s ease-in-out infinite;
-}
-@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 /* The simulation-only config is meaningless when mirroring a real torrent. */
 body.live .panel .grid, body.live .hint { display: none; }
 
