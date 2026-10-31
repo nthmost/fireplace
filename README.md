@@ -14,7 +14,7 @@ glowing coals:
 |------|-----------|----------|
 | **Active flame height** | **download speed** | ignites low, leaps taller the faster it downloads, sinks to a low flame as the download slows |
 | **Active flame width** | **widest speed so far** (ratchet) | spreads as the fire picks up and **holds that width** — a fire doesn't contract once it's caught, so it can burn wide but low |
-| **Coal bed** (width) | **% complete** | coals *accumulate* as data arrives — the glowing bed widens with progress and lingers hot after the flame dies down |
+| **Coal bed** (width) | **% complete** | coals *accumulate* as data arrives — the glowing bed widens with progress and lingers hot after the flame dies down. Two stacked rows, independently coloured (hotter top, darker front), so it reads as layered coals |
 | **Heat** (color + flicker speed) | **seeders** (the fuel) | 1 seeder → dim, deep-red, slow smoulder; a big swarm → white-hot and fast |
 | **Smoke** (web) | **upload, once seeding** | after it completes, the coals puff smoke whenever peers are downloading *from* you — denser the more leechers; none when seeding to nobody |
 
