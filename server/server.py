@@ -55,6 +55,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=str(WEB), **k)
 
+    def end_headers(self):
+        # No stale assets during active iteration — always revalidate.
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        super().end_headers()
+
     def do_GET(self):  # noqa: N802
         if self.path.split("?", 1)[0] == "/api/progress":
             return self._progress()
