@@ -14,12 +14,32 @@ const DEFAULTS = {
   seeders: "", // "" = auto-ramp the swarm; a number pins it
   fps: 24,
   loop: true,
+  scenario: "healthy",
+};
+
+// Preset demos. Each sets the visible fields and (except 'custom') the sim's
+// character bands: rateBand [MB/s], seedBand [count], seedBias (→ low end),
+// upBand [peers we seed to]. See SimulatedSource.
+const SCENARIOS = {
+  healthy: { label: "Healthy download",
+    name: "ubuntu-25.10-desktop-amd64.iso", size: 1.4, duration: 45, maxRate: 5 },
+  rare: { label: "Rare — barely seeded",
+    name: "lost-pilot-1983-telecine.avi", size: 1.1, duration: 180, maxRate: 1.2,
+    rateBand: [0.02, 0.35], seedBand: [1, 3], seedBias: 0.82, upBand: [0, 0] },
+  big: { label: "12 GB — slow & seeding",
+    name: "planet-earth-II-2016-2160p.mkv", size: 12, duration: 150, maxRate: 3,
+    rateBand: [0.5, 2.4], seedBand: [8, 20], seedBias: 0.4, upBand: [2, 10] },
+  flash: { label: "Flash crowd — fresh release",
+    name: "big-buck-bunny-4k-remaster.mkv", size: 4.2, duration: 60, maxRate: 10,
+    rateBand: [2, 9], seedBand: [50, 180], seedBias: 0.3, upBand: [15, 45] },
+  custom: { label: "Custom" },
 };
 
 function readConfig() {
   const q = new URLSearchParams(location.search);
   const num = (k, d) => (q.has(k) && q.get(k) !== "" ? Number(q.get(k)) : d);
-  return {
+  const scenario = SCENARIOS[q.get("scenario")] ? q.get("scenario") : DEFAULTS.scenario;
+  const c = {
     name: q.get("name") || DEFAULTS.name,
     size: num("size", DEFAULTS.size),
     duration: num("duration", DEFAULTS.duration),
@@ -27,11 +47,22 @@ function readConfig() {
     seeders: q.has("seeders") ? q.get("seeders") : DEFAULTS.seeders,
     fps: num("fps", DEFAULTS.fps),
     loop: q.has("loop") ? q.get("loop") !== "0" && q.get("loop") !== "false" : DEFAULTS.loop,
+    scenario,
   };
+  // A preset drives the visible fields unless the URL explicitly overrides them.
+  const s = SCENARIOS[scenario];
+  if (scenario !== "custom") {
+    if (!q.has("name")) c.name = s.name;
+    if (!q.has("size")) c.size = s.size;
+    if (!q.has("duration")) c.duration = s.duration;
+    if (!q.has("maxRate")) c.maxRate = s.maxRate;
+  }
+  return c;
 }
 
 function writeConfigToURL(cfg) {
   const q = new URLSearchParams();
+  q.set("scenario", cfg.scenario);
   q.set("name", cfg.name);
   q.set("size", cfg.size);
   q.set("duration", cfg.duration);
@@ -69,11 +100,16 @@ function start() {
   if (live) {
     source = liveSource;            // one persistent live source; just reset the view
   } else {
+    const sc = SCENARIOS[cfg.scenario] || {};
     source = new SimulatedSource({
       duration: cfg.duration,
       sizeGB: cfg.size,
       name: cfg.name,
       seeders: cfg.seeders === "" || cfg.seeders == null ? null : Number(cfg.seeders),
+      rateBand: sc.rateBand,
+      seedBand: sc.seedBand,
+      seedBias: sc.seedBias,
+      upBand: sc.upBand,
     });
   }
   frame = 0;
@@ -160,6 +196,7 @@ window.addEventListener("keydown", (e) => {
 
 // ---- control panel ---------------------------------------------------------
 function syncControls() {
+  el("c-scenario").value = cfg.scenario;
   el("c-name").value = cfg.name;
   el("c-size").value = cfg.size;
   el("c-duration").value = cfg.duration;
@@ -169,8 +206,27 @@ function syncControls() {
   el("c-loop").checked = cfg.loop;
 }
 
+// Pick a preset: fill the visible fields from it (keep fps/loop), then restart.
+function applyScenario(key) {
+  cfg.scenario = key;
+  const s = SCENARIOS[key];
+  if (key !== "custom" && s) {
+    cfg.name = s.name;
+    cfg.size = s.size;
+    cfg.duration = s.duration;
+    cfg.maxRate = s.maxRate;
+    cfg.seeders = "";            // band-driven in a preset
+  }
+  writeConfigToURL(cfg);
+  start();                        // start() calls syncControls()
+}
+
+el("c-scenario").addEventListener("change", (e) => applyScenario(e.target.value));
+
 el("apply").addEventListener("click", () => {
+  // Editing the fields is a "custom" setup (drops any preset's character bands).
   cfg = {
+    scenario: "custom",
     name: el("c-name").value || DEFAULTS.name,
     size: Number(el("c-size").value) || DEFAULTS.size,
     duration: Number(el("c-duration").value) || DEFAULTS.duration,

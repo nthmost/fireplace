@@ -126,14 +126,15 @@ body.fs .stage {
 .hint { color: var(--dim); font-size: 12px; margin: 0 0 12px; }
 .hint code { color: var(--ember); }
 
+.scenario { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); margin-bottom: 12px; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
 .grid label.check { flex-direction: row; align-items: center; gap: 8px; }
-.grid input[type="text"], .grid input[type="number"] {
+.grid input[type="text"], .grid input[type="number"], .scenario select {
   background: #0d0906; border: 1px solid var(--stone); color: var(--ink);
   padding: 7px 9px; border-radius: 5px; font: inherit; font-size: 13px;
 }
-.grid input:focus { outline: none; border-color: var(--ember); }
+.grid input:focus, .scenario select:focus { outline: none; border-color: var(--ember); }
 
 .buttons { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .buttons button {

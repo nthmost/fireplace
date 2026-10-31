@@ -32,7 +32,16 @@
 
     <button id="toggle-panel" class="toggle">⚙ config</button>
     <section id="panel" class="panel collapsed">
-      <p class="hint">Set these here, or pass them as URL params (<code>?duration=60&amp;maxRate=8&amp;seeders=45</code>).</p>
+      <p class="hint">Pick a scenario, or tweak the fields and Apply. All settable via URL params too (<code>?scenario=big</code>, <code>?duration=60&amp;maxRate=8&amp;seeders=45</code>).</p>
+      <label class="scenario">Scenario
+        <select id="c-scenario">
+          <option value="healthy">Healthy download</option>
+          <option value="rare">Rare — barely seeded (1–3 seeders, crawls)</option>
+          <option value="big">12 GB — slow &amp; seeding (8–20 seeders)</option>
+          <option value="flash">Flash crowd — fresh release (huge swarm)</option>
+          <option value="custom">Custom (use fields below)</option>
+        </select>
+      </label>
       <div class="grid">
         <label>Item name <input id="c-name" type="text" /></label>
         <label>Size (GB) <input id="c-size" type="number" step="0.1" min="0.01" /></label>

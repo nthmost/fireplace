@@ -65,6 +65,16 @@ export class SimulatedSource {
     this.name = opts.name ?? "ubuntu-25.10-desktop-amd64.iso";
     // null => auto-ramp the swarm; a number pins it (so you can dial the heat).
     this.fixedSeeders = opts.seeders ?? null;
+    // Scenario bands (optional). When given they shape the download's character:
+    //   rateBand [minMBs,maxMBs]  — download speed band (flame height)
+    //   seedBand [min,max]        — seeder count band (fuel / heat)
+    //   seedBias 0..1             — higher = cluster toward the low end ("usually 1")
+    //   upBand   [min,max]        — peers downloading FROM us (seeding → smoke),
+    //                               active even while still downloading
+    this.rateBand = opts.rateBand ?? null;
+    this.seedBand = opts.seedBand ?? null;
+    this.seedBias = opts.seedBias ?? 0.3;
+    this.upBand = opts.upBand ?? null;
     this.reset();
   }
 
@@ -72,9 +82,9 @@ export class SimulatedSource {
     this._start = performance.now() / 1000;
     this._lastT = this._start;
     this._lastFrac = 0;
-    this._peers = this.fixedSeeders ?? 2;
+    this._peers = this.fixedSeeders ?? (this.seedBand ? this.seedBand[0] : 2);
     this._rateEma = 0;
-    this._up = 0;           // seeding peers once complete (drives the smoke)
+    this._up = 0;           // peers we're seeding to (drives the smoke)
   }
 
   _curve(t) {
@@ -86,38 +96,52 @@ export class SimulatedSource {
   poll() {
     const now = performance.now() / 1000;
     const frac = this._curve(now - this._start);
+    const done = frac >= 0.999;
+    const momentum = 0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, frac)); // slow at ends
 
-    // Instantaneous rate from fraction moved, jittered, then EMA-smoothed so the
-    // flame height drifts instead of flashing every frame.
-    const dt = Math.max(1e-3, now - this._lastT);
-    const dfrac = Math.max(0, frac - this._lastFrac);
-    const baseRate = (dfrac * this.totalBytes) / dt;
-    const jitter = 1 + (Math.random() * 0.6 - 0.25);
-    this._rateEma = 0.75 * this._rateEma + 0.25 * baseRate * jitter;
+    // --- download rate → flame height ---
+    if (this.rateBand) {
+      // band-driven: a realistic speed that ebbs with the download's momentum
+      const [lo, hi] = this.rateBand;
+      const target = (lo + (hi - lo) * momentum) * (1 + (Math.random() * 0.5 - 0.25)) * 1e6;
+      this._rateEma = 0.92 * this._rateEma + 0.08 * target;
+    } else {
+      // derive from fraction moved (original behaviour)
+      const dt = Math.max(1e-3, now - this._lastT);
+      const dfrac = Math.max(0, frac - this._lastFrac);
+      const baseRate = (dfrac * this.totalBytes) / dt;
+      const jitter = 1 + (Math.random() * 0.6 - 0.25);
+      this._rateEma = 0.75 * this._rateEma + 0.25 * baseRate * jitter;
+    }
     const rate = this._rateEma;
     this._lastT = now;
     this._lastFrac = frac;
 
-    // Seeders drift smoothly toward their target (never a per-frame jump).
-    const target =
-      this.fixedSeeders != null
-        ? this.fixedSeeders
-        : 3 + 34 * Math.sin(Math.PI * Math.min(1, frac));
-    this._peers += 0.12 * (target - this._peers) + (Math.random() * 2 - 1);
-    this._peers = Math.max(1, Math.min(60, this._peers));
-
-    const done = frac >= 0.999;
+    // --- seeders (fuel / heat) ---
+    if (this.fixedSeeders != null) {
+      this._peers = this.fixedSeeders;
+    } else if (this.seedBand) {
+      const [lo, hi] = this.seedBand;
+      const mean = lo + (hi - lo) * (1 - this.seedBias) * 0.5;   // biased toward lo
+      this._peers += 0.08 * (mean - this._peers) + (Math.random() - 0.5) * 1.5;
+      this._peers = Math.max(lo, Math.min(hi, this._peers));
+    } else {
+      const target = 3 + 34 * Math.sin(Math.PI * Math.min(1, frac));
+      this._peers += 0.12 * (target - this._peers) + (Math.random() * 2 - 1);
+      this._peers = Math.max(1, Math.min(60, this._peers));
+    }
     const peers = done ? 0 : Math.max(1, Math.round(this._peers));
     const state = done ? "done" : rate < 1 ? "stalled" : "active";
 
-    // Once complete, simulate seeding to a drifting handful of leechers so the
-    // finished fire puffs smoke (no upload activity while still downloading).
-    if (done) {
-      this._up += 0.1 * (5 - this._up) + (Math.random() * 1.6 - 0.8);
-      this._up = Math.max(0, Math.min(12, this._up));
-    } else {
-      this._up = 0;
-    }
+    // --- upload / seeding → smoke ---
+    // With an upBand, we seed to leechers throughout (and after) the download.
+    // Otherwise we only seed once complete (original behaviour).
+    let upTarget;
+    if (this.upBand) upTarget = (this.upBand[0] + this.upBand[1]) / 2;
+    else upTarget = done ? 5 : 0;
+    this._up += 0.1 * (upTarget - this._up) + (Math.random() * 1.6 - 0.8);
+    const upHi = this.upBand ? this.upBand[1] : 12;
+    this._up = Math.max(0, Math.min(upHi, this._up));
     const upPeers = this._up > 0.5 ? Math.round(this._up) : 0;
 
     return {

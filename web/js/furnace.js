@@ -259,11 +259,11 @@ export function draw(ctx, p, frame, W, H) {
     }
   }
 
-  // ---- Smoke (seeding only) ------------------------------------------------
-  // Lifts off the coals when the torrent is done AND feeding peers; denser the
-  // more leechers are pulling from us.
+  // ---- Smoke -----------------------------------------------------------------
+  // Lifts off the coals whenever peers are downloading FROM us (seeding — during
+  // the download or after it completes); denser the more leechers.
   const upPeers = p.up_peers || 0;
-  if (done && upPeers > 0) {
+  if (upPeers > 0) {   // smoke whenever we're feeding peers (seeding, during or after)
     const rate = Math.min(1, upPeers / 6) * 0.9;      // wisps per frame
     let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
     const left = coalLeft + coalActive * 0.15;
