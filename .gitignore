@@ -8,6 +8,9 @@ dist/
 .venv/
 venv/
 
+# Secrets / local runtime config (RPC creds live here, never in git)
+.env
+
 # OS / editor
 .DS_Store
 *.swp

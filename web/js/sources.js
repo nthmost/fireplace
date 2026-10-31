@@ -1,11 +1,53 @@
 // Progress sources for the web furnace — the browser twin of fireplace/sources.py.
 // A source just needs poll() -> {fraction, rate_bps, downloaded, total, name,
-// peers, state, done}. Today it's simulated; a future WebSocket/HTTP source that
-// mirrors a real torrent client implements the same shape and nothing else changes.
+// peers, state, done}. SimulatedSource fakes it; LiveSource mirrors a real
+// Transmission torrent through the local backend (server/server.py).
 
 export function seedersToHeat(peers) {
   // Seeders are the fuel: one lone seeder barely smoulders, a swarm roars.
   return 1 - Math.exp(-Math.max(0, peers) / 12);
+}
+
+// Live source: polls a backend's /api/progress, which mirrors a real Transmission
+// torrent. Same shape as SimulatedSource. The fetch is async but the furnace
+// renders every frame, so we keep the latest snapshot and return it synchronously
+// from poll(); a background timer refreshes it about once a second.
+export class LiveSource {
+  constructor(url = "/api/progress", refreshMs = 1000) {
+    this.url = url;
+    this._latest = {
+      fraction: 0, rate_bps: 0, downloaded: 0, total: 0,
+      name: "…", peers: 0, state: "stalled", done: false,
+    };
+    this._tick();
+    this._timer = setInterval(() => this._tick(), refreshMs);
+  }
+
+  async _tick() {
+    try {
+      const r = await fetch(this.url, { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        if (!d.error) this._latest = d;
+      }
+    } catch (_) {
+      /* transient hiccup — keep the last snapshot */
+    }
+  }
+
+  poll() {
+    return this._latest;
+  }
+}
+
+// Is a live backend present? (The static public site 404s this → simulated.)
+export async function liveBackendAvailable(url = "/api/progress") {
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    return r.ok;
+  } catch (_) {
+    return false;
+  }
 }
 
 export class SimulatedSource {

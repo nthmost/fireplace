@@ -3,7 +3,7 @@
 //
 //   https://fireplace.nthmost.com/?name=debian-13.iso&size=3.7&duration=60&maxRate=8&seeders=45&loop=1
 
-import { SimulatedSource } from "./sources.js";
+import { SimulatedSource, LiveSource, liveBackendAvailable } from "./sources.js";
 import { draw } from "./furnace.js";
 
 const DEFAULTS = {
@@ -48,6 +48,8 @@ const el = (id) => document.getElementById(id);
 
 let cfg = readConfig();
 let source, frame, finishedAt, paused = false;
+let live = false;           // mirroring a real Transmission torrent?
+let liveSource = null;      // created once when a backend is detected
 
 function sizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -62,12 +64,16 @@ window.addEventListener("resize", () => { dims = sizeCanvas(); });
 
 function start() {
   draw.maxRateMBs = cfg.maxRate;
-  source = new SimulatedSource({
-    duration: cfg.duration,
-    sizeGB: cfg.size,
-    name: cfg.name,
-    seeders: cfg.seeders === "" || cfg.seeders == null ? null : Number(cfg.seeders),
-  });
+  if (live) {
+    source = liveSource;            // one persistent live source; just reset the view
+  } else {
+    source = new SimulatedSource({
+      duration: cfg.duration,
+      sizeGB: cfg.size,
+      name: cfg.name,
+      seeders: cfg.seeders === "" || cfg.seeders == null ? null : Number(cfg.seeders),
+    });
+  }
   frame = 0;
   finishedAt = null;
   dims = sizeCanvas();
@@ -88,7 +94,9 @@ function loop(now) {
   updateReadout(r);
   frame++;
 
-  if (p.done) {
+  // A real torrent keeps being monitored after it completes (seeding); only the
+  // simulated demo loops back to the start.
+  if (p.done && !live) {
     if (finishedAt == null) finishedAt = now;
     else if (cfg.loop && now - finishedAt > 3500) start();
   }
@@ -99,14 +107,18 @@ function updateReadout(r) {
   el("bar-fill").style.width = r.percent + "%";
   el("name").textContent = r.name;
   el("size").textContent = `${r.downloaded} / ${r.total}`;
+  const seeders = `${r.peers} seeder${r.peers === 1 ? "" : "s"}`;
   if (r.done) {
     el("status").textContent = "✓ complete — seeding";
     el("status").className = "status done";
+  } else if (r.state === "paused") {
+    el("status").textContent = `⏸ paused · ${seeders}`;
+    el("status").className = "status stalled";
   } else if (r.state === "stalled") {
     el("status").textContent = "… connecting to peers";
     el("status").className = "status stalled";
   } else {
-    el("status").textContent = `${r.rate}/s · ${r.peers} seeders`;
+    el("status").textContent = `${r.rate}/s · ${seeders}`;
     el("status").className = "status active";
   }
 }
@@ -144,5 +156,14 @@ el("toggle-panel").addEventListener("click", () => {
   el("panel").classList.toggle("collapsed");
 });
 
-start();
-requestAnimationFrame(loop);
+// Boot: if a live backend is answering /api/progress, mirror the real torrent;
+// otherwise fall back to the simulated demo. Same page, both modes.
+(async () => {
+  live = await liveBackendAvailable();
+  if (live) {
+    liveSource = new LiveSource();
+    document.body.classList.add("live");
+  }
+  start();
+  requestAnimationFrame(loop);
+})();

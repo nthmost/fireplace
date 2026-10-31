@@ -101,11 +101,33 @@ https://fireplace.nthmost.com/?name=debian-13.iso&size=3.7&duration=60&maxRate=8
 | `fps` | animation frame rate | `24` |
 | `loop` | restart when the download completes | `1` |
 
-### Deploy
+### Deploy (static, simulated)
 
 ```shell
 cd web && ./deploy.sh        # rsync to nthmost@nthmost.com:/var/www/fireplace.nthmost.com
 ```
+
+## Live web monitor (real torrent)
+
+The static page can't reach Transmission directly (creds, CORS, RPC whitelist), so
+[`server/`](server/) adds a tiny zero-dependency backend that serves the same
+`web/` furnace **and** a `GET /api/progress` endpoint mirroring a real torrent —
+credentials stay server-side. The page auto-detects it: if `/api/progress`
+answers it goes **live** (badge + no sim controls), otherwise it falls back to the
+simulated demo. Run it on the box that runs Transmission.
+
+```shell
+# locally:
+export TR_RPC_USER=… TR_RPC_PASS=… TR_HOST=127.0.0.1 TR_TORRENT=Pimsleur
+python3 server/server.py                      # → http://localhost:8673/
+
+# as a systemd service on the Transmission host (pulls creds from the daemon's
+# own postprocess.conf; writes a local .env; needs passwordless sudo):
+ssh myhost 'bash -s' < server/deploy-loki.sh  # → http://myhost.local:8673/
+```
+
+Config (env): `FIREPLACE_PORT` `FIREPLACE_HOST` `TR_HOST` `TR_PORT`
+`TR_RPC_USER` `TR_RPC_PASS` `TR_TORRENT` (id or name substring).
 
 ## Architecture
 
