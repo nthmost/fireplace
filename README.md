@@ -12,7 +12,8 @@ glowing coals:
 
 | Part | Driven by | Behavior |
 |------|-----------|----------|
-| **Active flame** (width *and* height) | **download speed** | ignites as a narrow central column; spreads wider and taller the faster it downloads; recedes to a low narrow flame as the download tails off |
+| **Active flame height** | **download speed** | ignites low, leaps taller the faster it downloads, sinks to a low flame as the download slows |
+| **Active flame width** | **widest speed so far** (ratchet) | spreads as the fire picks up and **holds that width** — a fire doesn't contract once it's caught, so it can burn wide but low |
 | **Coal bed** (width) | **% complete** | coals *accumulate* as data arrives — the glowing bed widens with progress and lingers hot after the flame dies down |
 | **Heat** (color + flicker speed) | **seeders** (the fuel) | 1 seeder → dim, deep-red, slow smoulder; a big swarm → white-hot and fast |
 

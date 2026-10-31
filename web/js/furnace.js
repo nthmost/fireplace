@@ -39,6 +39,11 @@ const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(r *
 const sparks = [];
 const MAX_SPARKS = 420;
 
+// Width ratchet: a fire spreads across its fuel and holds that width even as it
+// dies down — so the flame's *width* only ever grows for a given torrent (height
+// still tracks live speed). Reset when the torrent changes or restarts.
+let fireSpread = { key: null, frac: 0, peak: 0 };
+
 function humanBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
@@ -54,6 +59,17 @@ export function draw(ctx, p, frame, W, H) {
   const vigor = done ? 0 : Math.max(0.16, Math.min(1, p.rate_bps / MAX_RATE));
   const coalFrac = Math.max(0, p.fraction);
   const coalHeat = done ? Math.max(heat, 0.45) : heat;
+
+  // Width ratchet (monotonic): the fire spreads but never contracts. Reset on a
+  // torrent switch (name change) or a restart (fraction jumps backwards).
+  const spreadKey = p.name || "";
+  if (spreadKey !== fireSpread.key || p.fraction < fireSpread.frac - 0.05) {
+    fireSpread = { key: spreadKey, frac: p.fraction, peak: 0 };
+    sparks.length = 0;                       // fresh fire for a new torrent
+  }
+  fireSpread.frac = p.fraction;
+  if (!done) fireSpread.peak = Math.max(fireSpread.peak, vigor);
+  const widthFrac = fireSpread.peak;         // flame width = widest it's ever been
 
   ctx.clearRect(0, 0, W, H);
 
@@ -98,7 +114,7 @@ export function draw(ctx, p, frame, W, H) {
   const bucket = Math.floor(frame / 3);
   const heatColor = 0.3 + 0.7 * heat;
 
-  const activeW = Math.max(2, vigor * FW);
+  const activeW = Math.max(2, widthFrac * FW);   // width = ratcheted peak
   const centerCol = (FW - 1) / 2;
   const half = activeW / 2;
 

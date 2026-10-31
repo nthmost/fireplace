@@ -62,33 +62,33 @@ def seeders_to_heat(peers: int) -> float:
 def _render_fire(
     width: int,
     height: int,
-    vigor: float,
+    width_frac: float,
+    height_level: float,
     heat: float,
     frame: int,
 ) -> list[str]:
-    """The active flame — a central column that grows wider *and* taller with
-    `vigor` (download speed) and recedes as the download tails off.
+    """The active flame — a central column of flame.
 
-      * vigor (0..1) — how hard the fire is burning = current download speed.
-        Sets BOTH the width of the flame body and its height together, so the
-        fire ignites as a narrow column, spreads wide and tall at full speed,
-        then draws back to a low narrow flame as the download slows.
-      * heat  (0..1) — seeders/fuel: color temperature + flicker speed. A lone
-        seeder smoulders deep-red and slow; a swarm roars white-hot and fast.
+      * width_frac   (0..1) — how wide the flame body spreads. This is ratcheted
+        by the caller (a fire spreads but doesn't contract), so it only grows.
+      * height_level (0..1) — how tall the flames leap = current download speed;
+        this still rises and falls, so a wide fire can burn low.
+      * heat         (0..1) — seeders/fuel: color temperature + flicker speed. A
+        lone seeder smoulders deep-red and slow; a swarm roars white-hot and fast.
 
     Columns are rendered with a sub-cell vertical fill (partial top glyph) so a
     weak fire shows a genuinely short flame instead of snapping on at a
     threshold. Horizontal taper + layered-sine flicker give it a flame shape
     that sways smoothly over time.
     """
-    if vigor <= 0:
+    if height_level <= 0 or width_frac <= 0:
         return [" " * width for _ in range(height)]
 
     t = frame * (0.07 + 0.20 * heat)     # more fuel → livelier crackle
     heat_color = 0.30 + 0.70 * heat      # how far up the color gradient we climb
     bucket = frame // 3                   # colored licks persist a few frames
 
-    active_w = max(2.0, vigor * width)   # flame body width grows with vigor
+    active_w = max(2.0, width_frac * width)   # flame body width (ratcheted peak)
     center = (width - 1) / 2.0
     half = active_w / 2.0
 
@@ -106,7 +106,7 @@ def _render_fire(
                 + 0.3 * math.sin(t * 0.4 + x * 0.23)
             ) / 1.8
             flick = 0.85 + 0.15 * wave
-            col_rows[x] = max(0.0, vigor * height * taper * flick)
+            col_rows[x] = max(0.0, height_level * height * taper * flick)
 
     rows: list[str] = []
     for row in range(height):
@@ -214,6 +214,11 @@ def _bar(width: int, frac: float) -> str:
 
 INNER = 36  # inner width of the furnace box
 
+# Width ratchet: a fire spreads but never contracts — the flame holds the widest
+# it has ever grown for the current torrent (height still tracks live speed).
+# Reset when the torrent changes or restarts (see render()).
+_SPREAD = {"key": None, "frac": 0.0, "peak": 0.0}
+
 
 def render(p: Progress, frame: int) -> list[str]:
     """Return the full furnace as a list of printable (ANSI) lines."""
@@ -257,14 +262,24 @@ def render(p: Progress, frame: int) -> list[str]:
     # hot; seeders are the fuel that sets the heat.
     MAX_RATE = 5 * 1024 * 1024  # 5 MB/s reads as a full, roaring blaze
     heat = seeders_to_heat(p.peers)
-    # Active flame: nothing once complete; otherwise a small flame even when slow.
+    # Flame height tracks current speed; a small flame even when slow, none done.
     vigor = 0.0 if done else max(0.16, min(1.0, p.rate_bps / MAX_RATE))
+
+    # Width ratchet (monotonic): the fire spreads but never contracts. Reset on a
+    # torrent switch (name change) or restart (fraction jumps backwards).
+    if p.name != _SPREAD["key"] or p.fraction < _SPREAD["frac"] - 0.05:
+        _SPREAD.update(key=p.name, frac=p.fraction, peak=0.0)
+    _SPREAD["frac"] = p.fraction
+    if not done:
+        _SPREAD["peak"] = max(_SPREAD["peak"], vigor)
+    width_frac = _SPREAD["peak"]
+
     # Coals accumulate with progress and keep a warm afterglow once it's done.
     coal_frac = max(0.0, p.fraction)
     coal_heat = max(heat, 0.45) if done else heat
 
     fire_w = INNER - 4
-    fire = _render_fire(fire_w, 5, vigor, heat, frame)
+    fire = _render_fire(fire_w, 5, width_frac, vigor, heat, frame)
     for frow in fire:
         inner = f" {gd}({RESET}{frow}{gd}){RESET}"
         # visible width inside: " " + "(" + fire_w + ")" = fire_w + 3
