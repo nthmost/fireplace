@@ -22,7 +22,7 @@ Plus rising **sparks** off the flame tips (web), and rare single-cell **licks** 
 mineral color through the flame — greens at the base, blue and violet off the tips.
 
 ```
-      D I G I T A L   F U R N A C E
+     T O R R E N T   F I R E P L A C E
 
   ╔══════════════════════════════════════╗
   ║ ubuntu-25.10-desktop-amd64.iso       ║

@@ -234,7 +234,7 @@ def render(p: Progress, frame: int) -> list[str]:
     lines: list[str] = []
 
     # Header
-    title = "D I G I T A L   F U R N A C E"
+    title = "T O R R E N T   F I R E P L A C E"
     lines.append(f"  {BOLD}{fg(214)}{title.center(INNER + 2)}{RESET}")
     lines.append("")
 
