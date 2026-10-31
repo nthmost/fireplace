@@ -5,15 +5,10 @@ zero-dependency terminal animation and as a web page.
 
 **Live demo (simulated): https://fireplace.nthmost.com**
 
-The furnace is the metaphor, done faithfully:
-
-- **input slot** `◆` — the torrent being "smelted"
-- **smelting arrow** `━━━▶` — fills left-to-right with download progress
-- **output slot** `▣` — the finished file (an ingot) once it's done
-
-The **fire itself is a live readout of the swarm**, and it behaves like a real
-fire — igniting as a narrow column, spreading wide and tall at full burn, then
-drawing back to a low flame over a wide bed of glowing coals:
+The **fire is a live readout of the swarm** — a furnace smelting the torrent into
+being. It behaves like a real fire: igniting as a narrow column, spreading wide
+and tall at full burn, then drawing back to a low flame over a wide bed of
+glowing coals:
 
 | Part | Driven by | Behavior |
 |------|-----------|----------|
@@ -51,7 +46,9 @@ python3 -m fireplace --duration 20 --fps 15
 python3 -m fireplace --name "big-linux-iso.torrent" --size 4.7
 ```
 
-Press `Ctrl-C` to bail out (the terminal is restored cleanly).
+Press `Ctrl-C` to bail out (the terminal is restored cleanly). The TUI also draws
+the classic Minecraft-furnace header — input slot `◆`, smelting arrow `━━▶`,
+output ingot `▣` — above the fire (the web version drops it as redundant).
 
 ## Real torrents (Transmission)
 
@@ -129,6 +126,14 @@ ssh myhost 'bash -s' < server/deploy-loki.sh  # → http://myhost.local:8673/
 Config (env): `FIREPLACE_PORT` `FIREPLACE_HOST` `TR_HOST` `TR_PORT`
 `TR_RPC_USER` `TR_RPC_PASS` `TR_TORRENT` (id or name substring).
 
+### Cycling torrents
+
+In live mode, if the daemon holds more than one torrent, **‹ / ›** arrows appear
+in the furnace's side margins (and the **← / →** keys work) to cycle through them,
+with an `n / m` indicator. `GET /api/progress?id=<n>` selects a specific torrent
+and returns the full torrent list + current index; switching re-reads the chosen
+torrent cleanly (smoothing resets so values don't carry over).
+
 ## Architecture
 
 The whole thing is built around one tiny seam so each phase is a drop-in swap:
@@ -150,8 +155,9 @@ add another `poll()`.
 - [x] **Phase 1** — TUI furnace, simulated progress
 - [x] **Phase 2** — web version at [fireplace.nthmost.com](https://fireplace.nthmost.com), simulated
 - [x] **Phase 3** — real torrents via `TransmissionSource` (BitTorrent + webseed fuel)
-- [ ] more sources (`QBittorrentSource`, …) and a web backend so the live site can
-      mirror a real client — each just implements `poll()`
+- [x] **Phase 4** — live web monitor (`server/`): real torrent in the browser, with
+      multi-torrent cycling
+- [ ] more sources (`QBittorrentSource`, …) — each just implements `poll()`
 
 ## License
 
