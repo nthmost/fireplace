@@ -50,7 +50,8 @@ WantedBy=multi-user.target
 UNIT
 
 sudo -n systemctl daemon-reload
-sudo -n systemctl enable --now fireplace-monitor
+sudo -n systemctl enable fireplace-monitor
+sudo -n systemctl restart fireplace-monitor   # restart picks up pulled code (enable --now won't)
 sleep 1
 echo "==> status: $(systemctl is-active fireplace-monitor)"
 curl -s -o /dev/null -w "==> local /api/progress → HTTP %{http_code}\n" "http://127.0.0.1:$PORT/api/progress"
