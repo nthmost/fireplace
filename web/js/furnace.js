@@ -9,7 +9,7 @@ import { seedersToHeat } from "./sources.js";
 // Color gradients (coolest → hottest), ported from the xterm-256 palettes.
 const FIRE = ["#5f0000","#870000","#af0000","#d70000","#ff0000","#ff5f00",
               "#ff8700","#ffaf00","#ffd700","#ffff00","#ffffaf","#ffffff"];
-const EMBER = ["#5f0000","#870000","#af0000","#d75f00"];
+const EMBER = ["#3a0000","#5f0000","#870000","#af0000","#d75f00","#ff8700"];
 const FLARE_BLUE = ["#0000af","#0000d7","#0000ff","#005fff","#0087ff","#00afff","#00d7ff"];
 const FLARE_GREEN = ["#005f00","#008700","#00af00","#00d700","#5fd700","#87ff00"];
 const FLARE_PURPLE = ["#5f005f","#5f0087","#5f00ff","#8700ff","#875fff","#af5fff","#d75fff"];
@@ -227,23 +227,34 @@ export function draw(ctx, p, frame, W, H) {
   }
   ctx.globalAlpha = 1;
 
-  // ---- Coal bed: widens with % complete, lingers hot ----------------------
+  // ---- Coal bed: two stacked rows, each coloured independently -------------
+  // widens with % complete, lingers hot. The two rows use different seeds +
+  // brightness bias so the bed reads as layered coals, not one flat spread.
   const coalActive = coalFrac * FW;
   const coalLeft = (FW - coalActive) / 2;
   const lit = 0.35 + 0.55 * coalHeat;
-  const baseIdx = Math.floor(coalHeat * (EMBER.length - 1));
-  for (let x = 0; x < FW; x++) {
-    const px = areaX + x * cell;
-    let color;
-    if (x >= coalLeft && x < coalLeft + coalActive) {
-      const r = hash01((x * 2654435761) ^ (bucket * 40503));
-      const ci = Math.max(0, Math.min(EMBER.length - 1, baseIdx + (r < 0.33 ? -1 : r > 0.66 ? 1 : 0)));
-      color = r < lit ? EMBER[ci] : EMBER[0];
-    } else {
-      color = STONE_DARK;
+  const baseIdx = coalHeat * (EMBER.length - 1);
+  const COAL_ROWS = 2;
+  for (let row = 0; row < COAL_ROWS; row++) {
+    const yRow = baseY + row * cell;
+    const rowBias = row === 0 ? 0.5 : -0.8;   // top row hotter; front row cooler
+    for (let x = 0; x < FW; x++) {
+      const px = areaX + x * cell;
+      let color;
+      if (x >= coalLeft && x < coalLeft + coalActive) {
+        // independent hashes per (x, row): lit pattern and shade differ by row
+        const hLit = hash01((x * 2654435761) ^ (row * 668265263) ^ (bucket * 40503));
+        const hShade = hash01((x * 40503) ^ (row * 19349663) ^ (bucket * 2246822519));
+        const jitter = Math.floor(hShade * 3) - 1;    // -1, 0, 1
+        const ci = Math.max(0, Math.min(EMBER.length - 1,
+          Math.round(baseIdx + rowBias + jitter)));
+        color = hLit < lit ? EMBER[ci] : EMBER[0];
+      } else {
+        color = STONE_DARK;
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.floor(px), Math.floor(yRow), Math.ceil(cell) - 1, Math.ceil(cell * 0.9));
     }
-    ctx.fillStyle = color;
-    ctx.fillRect(Math.floor(px), Math.floor(baseY), Math.ceil(cell) - 1, Math.ceil(cell * 0.9));
   }
 
   // ---- Smoke (seeding only) ------------------------------------------------
