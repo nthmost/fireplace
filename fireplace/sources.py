@@ -166,6 +166,26 @@ class TransmissionSource(ProgressSource):
         self._cache: Progress | None = None
         self._rate_ema = 0.0
         self._peers_ema = 0.0
+        self.current_id: int | None = None   # id of the torrent last selected
+        self.current_name = ""
+        self.last_list: list[dict] = []       # [{"id", "name"}] of all torrents
+
+    def select(self, torrent: int | str | None) -> None:
+        """Switch which torrent is mirrored (resets the cache + smoothing so the
+        fire re-reads the new torrent cleanly instead of carrying values over)."""
+        if torrent != self.torrent:
+            self.torrent = torrent
+            self._cache = None
+            self._last_rpc = 0.0
+            self._rate_ema = 0.0
+            self._peers_ema = 0.0
+
+    def list_torrents(self) -> list[dict]:
+        """Lightweight {id, name} list of everything in the daemon."""
+        out = self._call({"method": "torrent-get",
+                          "arguments": {"fields": ["id", "name"]}})
+        return [{"id": t["id"], "name": t["name"]}
+                for t in out["arguments"]["torrents"]]
 
     def _call(self, body: dict) -> dict:
         data = json.dumps(body).encode()
@@ -219,7 +239,9 @@ class TransmissionSource(ProgressSource):
         try:
             out = self._call({"method": "torrent-get",
                               "arguments": {"fields": self.FIELDS}})
-            t = self._select(out["arguments"]["torrents"])
+            all_torrents = out["arguments"]["torrents"]
+            self.last_list = [{"id": x["id"], "name": x["name"]} for x in all_torrents]
+            t = self._select(all_torrents)
         except Exception:
             # Don't crash the fire on a transient network hiccup — keep the last
             # frame, or show a cold, stalled hearth if we never connected.
@@ -230,9 +252,11 @@ class TransmissionSource(ProgressSource):
 
         self._last_rpc = now
         if t is None:
+            self.current_id, self.current_name = None, ""
             self._cache = Progress(fraction=0.0, name="(no torrents)",
                                    state="stalled")
             return self._cache
+        self.current_id, self.current_name = t["id"], t["name"]
 
         frac = float(t["percentDone"])
         rate = float(t["rateDownload"])

@@ -26,6 +26,7 @@ import sys
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -61,8 +62,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _progress(self):
         try:
+            q = parse_qs(urlparse(self.path).query)
+            want = q.get("id", [None])[0]
             with _lock:  # TransmissionSource caches shared state; serialize access
+                if want is not None and want.isdigit():
+                    SOURCE.select(int(want))
                 p = SOURCE.poll()
+                torrents = SOURCE.last_list
+                cur = SOURCE.current_id
+            index = next((i for i, t in enumerate(torrents) if t["id"] == cur), 0)
             payload = {
                 "fraction": p.fraction,
                 "rate_bps": p.rate_bps,
@@ -72,6 +80,10 @@ class Handler(SimpleHTTPRequestHandler):
                 "peers": p.peers,
                 "state": p.state,
                 "done": p.is_done,
+                "id": cur,
+                "index": index,
+                "count": len(torrents),
+                "torrents": torrents,
             }
             body = json.dumps(payload).encode()
             code = 200

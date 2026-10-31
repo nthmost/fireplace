@@ -13,14 +13,22 @@ export function seedersToHeat(peers) {
 // renders every frame, so we keep the latest snapshot and return it synchronously
 // from poll(); a background timer refreshes it about once a second.
 export class LiveSource {
-  constructor(url = "/api/progress", refreshMs = 1000) {
-    this.url = url;
+  constructor(base = "/api/progress", refreshMs = 1000) {
+    this.base = base;
+    this.url = base;
     this._latest = {
       fraction: 0, rate_bps: 0, downloaded: 0, total: 0,
       name: "…", peers: 0, state: "stalled", done: false,
+      id: null, index: 0, count: 0, torrents: [],
     };
     this._tick();
     this._timer = setInterval(() => this._tick(), refreshMs);
+  }
+
+  // Switch which torrent to mirror; refresh immediately so the UI reacts at once.
+  setId(id) {
+    this.url = id == null ? this.base : `${this.base}?id=${encodeURIComponent(id)}`;
+    this._tick();
   }
 
   async _tick() {

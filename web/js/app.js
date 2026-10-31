@@ -50,6 +50,8 @@ let cfg = readConfig();
 let source, frame, finishedAt, paused = false;
 let live = false;           // mirroring a real Transmission torrent?
 let liveSource = null;      // created once when a backend is detected
+let navTorrents = [];       // [{id, name}] of all torrents (live mode)
+let navIndex = 0;           // which one we're currently showing
 
 function sizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -92,6 +94,7 @@ function loop(now) {
   const p = source.poll();
   const r = draw(ctx, p, frame, dims.W, dims.H);
   updateReadout(r);
+  if (live) updateNav(p);
   frame++;
 
   // A real torrent keeps being monitored after it completes (seeding); only the
@@ -122,6 +125,37 @@ function updateReadout(r) {
     el("status").className = "status active";
   }
 }
+
+// ---- torrent nav (live mode) ----------------------------------------------
+function updateNav(p) {
+  navTorrents = p.torrents || [];
+  navIndex = p.index || 0;
+  const show = navTorrents.length > 1;
+  el("nav-prev").style.display = show ? "flex" : "none";
+  el("nav-next").style.display = show ? "flex" : "none";
+  const ind = el("nav-indicator");
+  if (show) {
+    ind.style.display = "block";
+    ind.textContent = `${navIndex + 1} / ${navTorrents.length}`;
+  } else {
+    ind.style.display = "none";
+  }
+}
+
+function cycle(delta) {
+  if (!live || navTorrents.length < 2) return;
+  const n = navTorrents.length;
+  navIndex = (((navIndex + delta) % n) + n) % n;   // wrap around
+  liveSource.setId(navTorrents[navIndex].id);
+}
+
+el("nav-prev").addEventListener("click", () => cycle(-1));
+el("nav-next").addEventListener("click", () => cycle(1));
+window.addEventListener("keydown", (e) => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  else if (e.key === "ArrowRight") cycle(1);
+});
 
 // ---- control panel ---------------------------------------------------------
 function syncControls() {

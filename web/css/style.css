@@ -55,6 +55,29 @@ body.live .panel .grid, body.live .hint { display: none; }
 
 #furnace { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 
+/* Next / previous torrent arrows — sit in the dark side margins, clear of the
+   stone box enclosing the fire. Shown only in live mode with >1 torrent. */
+.nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  display: none; align-items: center; justify-content: center;
+  width: 38px; height: 56px; border-radius: 9px;
+  background: rgba(20, 11, 6, 0.5); border: 1px solid var(--stone);
+  color: var(--ink); font-size: 30px; line-height: 1; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.nav-prev { left: 10px; }
+.nav-next { right: 10px; }
+.nav:hover {
+  border-color: var(--ember); color: #ffcf6b;
+  background: rgba(40, 20, 6, 0.7); box-shadow: 0 0 16px rgba(255, 110, 0, 0.25);
+}
+.nav:active { transform: translateY(-50%) scale(0.94); }
+.nav-indicator {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: none; font-size: 11px; color: var(--dim); letter-spacing: 0.08em;
+  background: rgba(10, 6, 4, 0.6); padding: 3px 10px; border-radius: 10px;
+}
+
 .readout { margin: 16px auto 0; max-width: 560px; }
 
 .pct-row { display: flex; align-items: center; gap: 12px; }
