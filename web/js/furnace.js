@@ -237,7 +237,8 @@ export function draw(ctx, p, frame, W, H) {
   const COAL_ROWS = 2;
   for (let row = 0; row < COAL_ROWS; row++) {
     const yRow = baseY + row * cell;
-    const rowBias = row === 0 ? 0.5 : -0.8;   // top row hotter; front row cooler
+    const top = row === 0;
+    const rowBias = top ? 0.5 : -1.6;   // front (bottom) row sits distinctly darker
     for (let x = 0; x < FW; x++) {
       const px = areaX + x * cell;
       let color;
@@ -245,7 +246,8 @@ export function draw(ctx, p, frame, W, H) {
         // independent hashes per (x, row): lit pattern and shade differ by row
         const hLit = hash01((x * 2654435761) ^ (row * 668265263) ^ (bucket * 40503));
         const hShade = hash01((x * 40503) ^ (row * 19349663) ^ (bucket * 2246822519));
-        const jitter = Math.floor(hShade * 3) - 1;    // -1, 0, 1
+        // top row varies -1..+1; front row skews downward (-1..0) so it stays dark
+        const jitter = top ? Math.floor(hShade * 3) - 1 : Math.floor(hShade * 2) - 1;
         const ci = Math.max(0, Math.min(EMBER.length - 1,
           Math.round(baseIdx + rowBias + jitter)));
         color = hLit < lit ? EMBER[ci] : EMBER[0];
