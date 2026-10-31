@@ -33,24 +33,24 @@ function hash01(n) {
 }
 const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(r * arr.length)))];
 
-// Rising sparks — a particle layer that lives across frames (unlike the rest of
-// the stateless renderer). Embers lift off the flame tips, drift, cool, and fade;
-// more of them the harder the fire burns.
-const sparks = [];
-const MAX_SPARKS = 420;
+const MAX_SPARKS = 420;   // rising embers off the flame tips
+const MAX_SMOKE = 150;    // wisps off the coals when seeding
+const SPREAD_EASE = 0.03; // how fast the fire creeps wider (smaller = slower)
 
-// Smoke — only once a torrent is done (purely seeding) AND actively feeding peers.
-// Wisps lift off the coal bed, drift, expand, and fade; denser with more leechers.
-const smoke = [];
-const MAX_SMOKE = 150;
-
-// Width ratchet, remembered PER TORRENT: a fire spreads across its fuel and holds
-// that width even as it dies down (height still tracks live speed). Keyed by
-// torrent so switching away and back resumes where it left off instead of
-// rebuilding. Eases outward (never snaps), only resets if that torrent restarts.
-const fireSpread = new Map();   // key -> { frac, peak }
-let lastKey = null;             // which torrent is currently on screen
-const SPREAD_EASE = 0.03;       // how fast the fire creeps wider (smaller = slower)
+// Each canvas needs its OWN fire state (particles + per-torrent width ratchet +
+// render settings), so the main view and the sidebar thumbnails don't corrupt
+// each other. Pass the returned object to draw().
+export function makeFireState() {
+  return {
+    sparks: [],          // {x,y,vx,vy,life,...} rising embers
+    smoke: [],           // {x,y,...} seeding smoke
+    spread: new Map(),   // per-torrent width ratchet: key -> {frac, peak}
+    lastKey: null,       // which torrent is currently on this canvas
+    maxRateMBs: 5,       // download speed that reads as a full blaze
+    fill: false,         // hug the box to the edges (fullscreen)
+  };
+}
+const _defaultState = makeFireState();
 
 function humanBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -60,9 +60,10 @@ function humanBytes(n) {
 }
 
 // Draw the whole scene onto ctx at logical size (W, H). `frame` advances time.
-export function draw(ctx, p, frame, W, H) {
+// `state` (from makeFireState) holds this canvas's particles + settings.
+export function draw(ctx, p, frame, W, H, state = _defaultState) {
   const done = !!p.done;
-  const MAX_RATE = (draw.maxRateMBs || 5) * 1024 * 1024;
+  const MAX_RATE = (state.maxRateMBs || 5) * 1024 * 1024;
   const heat = seedersToHeat(p.peers);
   const vigor = done ? 0 : Math.max(0.16, Math.min(1, p.rate_bps / MAX_RATE));
   const coalFrac = Math.max(0, p.fraction);
@@ -72,10 +73,10 @@ export function draw(ctx, p, frame, W, H) {
   // switching away and back resumes instead of rebuilding from scratch. Only a
   // true restart of that torrent (fraction jumps backwards) resets its width.
   const spreadKey = p.id != null ? "id:" + p.id : "name:" + (p.name || "");
-  let spread = fireSpread.get(spreadKey);
+  let spread = state.spread.get(spreadKey);
   if (!spread) {
     spread = { frac: p.fraction, peak: 0 };
-    fireSpread.set(spreadKey, spread);
+    state.spread.set(spreadKey, spread);
   }
   if (p.fraction < spread.frac - 0.05) spread.peak = 0;   // this torrent restarted
   spread.frac = p.fraction;
@@ -87,10 +88,10 @@ export function draw(ctx, p, frame, W, H) {
 
   // The transient particle layers belong to the on-screen fire; clear them only
   // when the viewed torrent actually changes (not every frame).
-  if (spreadKey !== lastKey) {
-    sparks.length = 0;
-    smoke.length = 0;
-    lastKey = spreadKey;
+  if (spreadKey !== state.lastKey) {
+    state.sparks.length = 0;
+    state.smoke.length = 0;
+    state.lastKey = spreadKey;
   }
 
   ctx.clearRect(0, 0, W, H);
@@ -101,8 +102,8 @@ export function draw(ctx, p, frame, W, H) {
 
   // Furnace geometry. In fill (fullscreen) mode the box hugs the edges so the
   // fire nearly fills its containing square; otherwise it sits inset on the page.
-  const mx = draw.fill ? 0.03 : 0.14;
-  const my = draw.fill ? 0.03 : 0.1;
+  const mx = state.fill ? 0.03 : 0.14;
+  const my = state.fill ? 0.03 : 0.1;
   const fx = W * mx, fy = H * my, fw = W * (1 - 2 * mx), fh = H * (1 - 2 * my);
   const cx = W / 2;
 
@@ -194,9 +195,9 @@ export function draw(ctx, p, frame, W, H) {
   if (!done && litCols.length) {
     const rate = vigor * (0.4 + 0.6 * heat) * 2.4;    // avg new sparks per frame
     let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
-    for (; n > 0 && sparks.length < MAX_SPARKS; n--) {
+    for (; n > 0 && state.sparks.length < MAX_SPARKS; n--) {
       const cx = litCols[(Math.random() * litCols.length) | 0];
-      sparks.push({
+      state.sparks.push({
         x: areaX + cx * cell + cell / 2,
         y: baseY - colRows[cx] * cell - cell * 0.5,
         vx: (Math.random() - 0.5) * 0.5,
@@ -209,14 +210,14 @@ export function draw(ctx, p, frame, W, H) {
     }
   }
   // Update + draw (newest spawns are hottest; they cool to deep red as they fade).
-  for (let i = sparks.length - 1; i >= 0; i--) {
-    const s = sparks[i];
+  for (let i = state.sparks.length - 1; i >= 0; i--) {
+    const s = state.sparks[i];
     s.x += s.vx;
     s.y += s.vy;
     s.vy *= 0.985;                                     // slow as it rises
     s.vx += (Math.random() - 0.5) * 0.06;             // wander
     s.life -= s.decay;
-    if (s.life <= 0 || s.y < fy + 2) { sparks.splice(i, 1); continue; }
+    if (s.life <= 0 || s.y < fy + 2) { state.sparks.splice(i, 1); continue; }
     let c;
     if (s.hue < 0.04) c = pick(FLARE_BLUE, 0.4 + s.life * 0.5);
     else if (s.hue < 0.06) c = pick(FLARE_GREEN, 0.4 + s.life * 0.5);
@@ -268,8 +269,8 @@ export function draw(ctx, p, frame, W, H) {
     let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
     const left = coalLeft + coalActive * 0.15;
     const wspan = Math.max(1, coalActive * 0.7);
-    for (; n > 0 && smoke.length < MAX_SMOKE; n--) {
-      smoke.push({
+    for (; n > 0 && state.smoke.length < MAX_SMOKE; n--) {
+      state.smoke.push({
         x: areaX + (left + Math.random() * wspan) * cell,
         y: baseY,
         vx: (Math.random() - 0.5) * 0.3,
@@ -281,15 +282,15 @@ export function draw(ctx, p, frame, W, H) {
       });
     }
   }
-  for (let i = smoke.length - 1; i >= 0; i--) {
-    const s = smoke[i];
+  for (let i = state.smoke.length - 1; i >= 0; i--) {
+    const s = state.smoke[i];
     s.x += s.vx;
     s.y += s.vy;
     s.vy *= 0.994;
     s.vx += (Math.random() - 0.5) * 0.03;
     s.size += s.grow;
     s.life -= s.decay;
-    if (s.life <= 0 || s.y < fy + 2) { smoke.splice(i, 1); continue; }
+    if (s.life <= 0 || s.y < fy + 2) { state.smoke.splice(i, 1); continue; }
     const g = Math.round(70 + 80 * s.life);           // warmer/brighter near coals
     ctx.globalAlpha = Math.min(0.26, s.life * 0.3);
     ctx.fillStyle = `rgb(${g},${g - 6},${g - 14})`;

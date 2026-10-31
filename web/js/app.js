@@ -1,19 +1,15 @@
-// Wires config → source → canvas furnace. Config vars can be set two ways when
-// you run the demo: via URL query params (shareable) or the live control panel.
+// Wires config → source → canvas furnace. Pick a scenario from the left sidebar
+// (each is a live mini-fire thumbnail), or mirror a real torrent ("Live"), or
+// hand-tune via the ⚙ panel. State is shareable through URL query params.
 //
-//   https://fireplace.nthmost.com/?name=debian-13.iso&size=3.7&duration=60&maxRate=8&seeders=45&loop=1
+//   ?scenario=big   ?scenario=custom&duration=60&maxRate=8&seeders=45
 
 import { SimulatedSource, LiveSource, liveBackendAvailable } from "./sources.js";
-import { draw } from "./furnace.js";
+import { draw, makeFireState } from "./furnace.js";
 
 const DEFAULTS = {
   name: "ubuntu-25.10-desktop-amd64.iso",
-  size: 1.4, // GB
-  duration: 45, // seconds
-  maxRate: 5, // MB/s that reads as a full blaze
-  seeders: "", // "" = auto-ramp the swarm; a number pins it
-  fps: 24,
-  loop: true,
+  size: 1.4, duration: 45, maxRate: 5, seeders: "", fps: 24, loop: true,
   scenario: "healthy",
 };
 
@@ -21,24 +17,27 @@ const DEFAULTS = {
 // character bands: rateBand [MB/s], seedBand [count], seedBias (→ low end),
 // upBand [peers we seed to]. See SimulatedSource.
 const SCENARIOS = {
-  healthy: { label: "Healthy download",
+  healthy: { label: "Healthy", sub: "steady swarm",
     name: "ubuntu-25.10-desktop-amd64.iso", size: 1.4, duration: 45, maxRate: 5 },
-  rare: { label: "Rare — barely seeded",
+  rare: { label: "Rare", sub: "1–3 seeders · crawls",
     name: "lost-pilot-1983-telecine.avi", size: 1.1, duration: 180, maxRate: 1.2,
     rateBand: [0.02, 0.35], seedBand: [1, 3], seedBias: 0.82, upBand: [0, 0] },
-  big: { label: "12 GB — slow & seeding",
+  big: { label: "12 GB, seeding", sub: "8–20 seeders · uploads too",
     name: "planet-earth-II-2016-2160p.mkv", size: 12, duration: 150, maxRate: 3,
     rateBand: [0.5, 2.4], seedBand: [8, 20], seedBias: 0.4, upBand: [2, 10] },
-  flash: { label: "Flash crowd — fresh release",
+  flash: { label: "Flash crowd", sub: "huge swarm · white-hot",
     name: "big-buck-bunny-4k-remaster.mkv", size: 4.2, duration: 60, maxRate: 10,
     rateBand: [2, 9], seedBand: [50, 180], seedBias: 0.3, upBand: [15, 45] },
-  custom: { label: "Custom" },
+  custom: { label: "Custom", sub: "⚙ panel" },
 };
+const PRESET_ORDER = ["healthy", "rare", "big", "flash"];
+
+const validScenario = (k) => k === "live" || !!SCENARIOS[k];
 
 function readConfig() {
   const q = new URLSearchParams(location.search);
   const num = (k, d) => (q.has(k) && q.get(k) !== "" ? Number(q.get(k)) : d);
-  const scenario = SCENARIOS[q.get("scenario")] ? q.get("scenario") : DEFAULTS.scenario;
+  const scenario = validScenario(q.get("scenario")) ? q.get("scenario") : DEFAULTS.scenario;
   const c = {
     name: q.get("name") || DEFAULTS.name,
     size: num("size", DEFAULTS.size),
@@ -49,9 +48,8 @@ function readConfig() {
     loop: q.has("loop") ? q.get("loop") !== "0" && q.get("loop") !== "false" : DEFAULTS.loop,
     scenario,
   };
-  // A preset drives the visible fields unless the URL explicitly overrides them.
   const s = SCENARIOS[scenario];
-  if (scenario !== "custom") {
+  if (s && scenario !== "custom") {   // a preset drives the fields unless overridden
     if (!q.has("name")) c.name = s.name;
     if (!q.has("size")) c.size = s.size;
     if (!q.has("duration")) c.duration = s.duration;
@@ -63,11 +61,13 @@ function readConfig() {
 function writeConfigToURL(cfg) {
   const q = new URLSearchParams();
   q.set("scenario", cfg.scenario);
-  q.set("name", cfg.name);
-  q.set("size", cfg.size);
-  q.set("duration", cfg.duration);
-  q.set("maxRate", cfg.maxRate);
-  if (cfg.seeders !== "" && cfg.seeders != null) q.set("seeders", cfg.seeders);
+  if (cfg.scenario === "custom") {
+    q.set("name", cfg.name);
+    q.set("size", cfg.size);
+    q.set("duration", cfg.duration);
+    q.set("maxRate", cfg.maxRate);
+    if (cfg.seeders !== "" && cfg.seeders != null) q.set("seeders", cfg.seeders);
+  }
   q.set("fps", cfg.fps);
   q.set("loop", cfg.loop ? "1" : "0");
   history.replaceState(null, "", "?" + q.toString());
@@ -79,10 +79,14 @@ const el = (id) => document.getElementById(id);
 
 let cfg = readConfig();
 let source, frame, finishedAt, paused = false;
-let live = false;           // mirroring a real Transmission torrent?
-let liveSource = null;      // created once when a backend is detected
-let navTorrents = [];       // [{id, name}] of all torrents (live mode)
-let navIndex = 0;           // which one we're currently showing
+let liveAvailable = false;   // backend present?
+let liveSource = null;
+let navTorrents = [];
+let navIndex = 0;
+const fireState = makeFireState();   // the main canvas's own particle/ratchet state
+let thumbs = [];                     // sidebar mini-fires
+
+const isLive = () => cfg.scenario === "live";
 
 function sizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -95,27 +99,37 @@ function sizeCanvas() {
 let dims = { W: 640, H: 420 };
 window.addEventListener("resize", () => { dims = sizeCanvas(); });
 
+function buildSource() {
+  if (cfg.scenario === "live" && liveSource) return liveSource;
+  const sc = SCENARIOS[cfg.scenario] || {};
+  fireState.maxRateMBs = cfg.maxRate;
+  return new SimulatedSource({
+    duration: cfg.duration, sizeGB: cfg.size, name: cfg.name,
+    seeders: cfg.seeders !== "" && cfg.seeders != null ? Number(cfg.seeders) : null,
+    rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
+  });
+}
+
 function start() {
-  draw.maxRateMBs = cfg.maxRate;
-  if (live) {
-    source = liveSource;            // one persistent live source; just reset the view
-  } else {
-    const sc = SCENARIOS[cfg.scenario] || {};
-    source = new SimulatedSource({
-      duration: cfg.duration,
-      sizeGB: cfg.size,
-      name: cfg.name,
-      seeders: cfg.seeders === "" || cfg.seeders == null ? null : Number(cfg.seeders),
-      rateBand: sc.rateBand,
-      seedBand: sc.seedBand,
-      seedBias: sc.seedBias,
-      upBand: sc.upBand,
-    });
-  }
+  source = buildSource();
   frame = 0;
   finishedAt = null;
+  document.body.classList.toggle("live", isLive());   // hides sim-only config panel
   dims = sizeCanvas();
   syncControls();
+  updateSidebarActive();
+}
+
+// Switch to a scenario (or 'live'). Presets fill the visible fields.
+function activate(key) {
+  cfg.scenario = key;
+  const s = SCENARIOS[key];
+  if (s && key !== "custom") {
+    cfg.name = s.name; cfg.size = s.size; cfg.duration = s.duration;
+    cfg.maxRate = s.maxRate; cfg.seeders = "";
+  }
+  writeConfigToURL(cfg);
+  start();
 }
 
 // ---- render loop (throttled to cfg.fps) -----------------------------------
@@ -128,14 +142,19 @@ function loop(now) {
   lastDraw = now;
 
   const p = source.poll();
-  const r = draw(ctx, p, frame, dims.W, dims.H);
+  const r = draw(ctx, p, frame, dims.W, dims.H, fireState);
   updateReadout(r);
-  if (live) updateNav(p);
+  if (isLive()) updateNav(p);
   frame++;
 
-  // A real torrent keeps being monitored after it completes (seeding); only the
-  // simulated demo loops back to the start.
-  if (p.done && !live) {
+  // sidebar mini-fires
+  for (const t of thumbs) {
+    t.frame++;
+    draw(t.ctx, t.src.poll(), t.frame, t.W, t.H, t.state);
+  }
+
+  // The simulated demo loops back; a real torrent keeps being monitored.
+  if (p.done && !isLive()) {
     if (finishedAt == null) finishedAt = now;
     else if (cfg.loop && now - finishedAt > 3500) start();
   }
@@ -179,24 +198,87 @@ function updateNav(p) {
 }
 
 function cycle(delta) {
-  if (!live || navTorrents.length < 2) return;
+  if (!isLive() || navTorrents.length < 2) return;
   const n = navTorrents.length;
-  navIndex = (((navIndex + delta) % n) + n) % n;   // wrap around
+  navIndex = (((navIndex + delta) % n) + n) % n;
   liveSource.setId(navTorrents[navIndex].id);
 }
 
 el("nav-prev").addEventListener("click", () => cycle(-1));
 el("nav-next").addEventListener("click", () => cycle(1));
 window.addEventListener("keydown", (e) => {
-  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
   if (e.key === "ArrowLeft") cycle(-1);
   else if (e.key === "ArrowRight") cycle(1);
   else if (e.key === "f" || e.key === "F") toggleFullscreen();
 });
 
-// ---- control panel ---------------------------------------------------------
+// ---- scenario sidebar (live mini-fire thumbnails) -------------------------
+const THUMB_W = 150, THUMB_H = 96;
+
+function buildSidebar() {
+  const bar = el("sidebar");
+  bar.innerHTML = "";
+  thumbs = [];
+  const keys = [];
+  if (liveAvailable) keys.push("live");
+  keys.push(...PRESET_ORDER);
+
+  for (const key of keys) {
+    const meta = key === "live"
+      ? { label: "Live", sub: "real torrent" }
+      : SCENARIOS[key];
+
+    const item = document.createElement("button");
+    item.className = "scene";
+    item.dataset.key = key;
+    item.title = `${meta.label} — ${meta.sub}`;
+
+    const cv = document.createElement("canvas");
+    cv.className = "thumb";
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = THUMB_W * dpr; cv.height = THUMB_H * dpr;
+    cv.style.width = THUMB_W + "px"; cv.style.height = THUMB_H + "px";
+    const tctx = cv.getContext("2d");
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const lab = document.createElement("div");
+    lab.className = "scene-label";
+    lab.innerHTML = `<strong>${meta.label}</strong><span>${meta.sub}</span>`;
+
+    item.append(cv, lab);
+    item.addEventListener("click", () => activate(key));
+    bar.appendChild(item);
+
+    // mini-fire source + its own state
+    const state = makeFireState();
+    let src;
+    if (key === "live") {
+      src = liveSource;
+      state.maxRateMBs = 5;
+    } else {
+      const sc = SCENARIOS[key];
+      state.maxRateMBs = sc.maxRate;
+      src = new SimulatedSource({
+        duration: 300, sizeGB: sc.size, name: sc.name,
+        rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
+      });
+      src._start = performance.now() / 1000 - 120;   // start mid-download
+      for (let i = 0; i < 160; i++) draw(tctx, src.poll(), i, THUMB_W, THUMB_H, state); // warm up
+    }
+    thumbs.push({ key, ctx: tctx, src, state, frame: 160, W: THUMB_W, H: THUMB_H });
+  }
+  updateSidebarActive();
+}
+
+function updateSidebarActive() {
+  for (const item of document.querySelectorAll(".scene")) {
+    item.classList.toggle("active", item.dataset.key === cfg.scenario);
+  }
+}
+
+// ---- control panel (custom tuning) ----------------------------------------
 function syncControls() {
-  el("c-scenario").value = cfg.scenario;
   el("c-name").value = cfg.name;
   el("c-size").value = cfg.size;
   el("c-duration").value = cfg.duration;
@@ -206,25 +288,7 @@ function syncControls() {
   el("c-loop").checked = cfg.loop;
 }
 
-// Pick a preset: fill the visible fields from it (keep fps/loop), then restart.
-function applyScenario(key) {
-  cfg.scenario = key;
-  const s = SCENARIOS[key];
-  if (key !== "custom" && s) {
-    cfg.name = s.name;
-    cfg.size = s.size;
-    cfg.duration = s.duration;
-    cfg.maxRate = s.maxRate;
-    cfg.seeders = "";            // band-driven in a preset
-  }
-  writeConfigToURL(cfg);
-  start();                        // start() calls syncControls()
-}
-
-el("c-scenario").addEventListener("change", (e) => applyScenario(e.target.value));
-
 el("apply").addEventListener("click", () => {
-  // Editing the fields is a "custom" setup (drops any preset's character bands).
   cfg = {
     scenario: "custom",
     name: el("c-name").value || DEFAULTS.name,
@@ -248,7 +312,6 @@ el("toggle-panel").addEventListener("click", () => {
 });
 
 // ---- fullscreen: just the fire, filling the screen ------------------------
-draw.fill = false;
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
     (document.documentElement.requestFullscreen?.() ?? Promise.reject()).catch(() => {});
@@ -259,19 +322,22 @@ function toggleFullscreen() {
 document.addEventListener("fullscreenchange", () => {
   const on = !!document.fullscreenElement;
   document.body.classList.toggle("fs", on);
-  draw.fill = on;                               // box hugs the edges in fullscreen
+  fireState.fill = on;                            // box hugs the edges in fullscreen
   requestAnimationFrame(() => { dims = sizeCanvas(); });
 });
 el("fullscreen").addEventListener("click", toggleFullscreen);
 
-// Boot: if a live backend is answering /api/progress, mirror the real torrent;
-// otherwise fall back to the simulated demo. Same page, both modes.
+// ---- boot -----------------------------------------------------------------
 (async () => {
-  live = await liveBackendAvailable();
-  if (live) {
+  liveAvailable = await liveBackendAvailable();
+  if (liveAvailable) {
     liveSource = new LiveSource();
-    document.body.classList.add("live");
+    // default to the real torrent unless the URL pinned a scenario
+    if (!new URLSearchParams(location.search).has("scenario")) cfg.scenario = "live";
+  } else if (cfg.scenario === "live") {
+    cfg.scenario = "healthy";   // no backend → can't go live
   }
+  buildSidebar();
   start();
   requestAnimationFrame(loop);
 })();
