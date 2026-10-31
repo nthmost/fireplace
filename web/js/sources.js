@@ -74,6 +74,7 @@ export class SimulatedSource {
     this._lastFrac = 0;
     this._peers = this.fixedSeeders ?? 2;
     this._rateEma = 0;
+    this._up = 0;           // seeding peers once complete (drives the smoke)
   }
 
   _curve(t) {
@@ -109,6 +110,16 @@ export class SimulatedSource {
     const peers = done ? 0 : Math.max(1, Math.round(this._peers));
     const state = done ? "done" : rate < 1 ? "stalled" : "active";
 
+    // Once complete, simulate seeding to a drifting handful of leechers so the
+    // finished fire puffs smoke (no upload activity while still downloading).
+    if (done) {
+      this._up += 0.1 * (5 - this._up) + (Math.random() * 1.6 - 0.8);
+      this._up = Math.max(0, Math.min(12, this._up));
+    } else {
+      this._up = 0;
+    }
+    const upPeers = this._up > 0.5 ? Math.round(this._up) : 0;
+
     return {
       fraction: Math.min(1, frac),
       rate_bps: done ? 0 : rate,
@@ -118,6 +129,8 @@ export class SimulatedSource {
       peers,
       state,
       done,
+      up_peers: upPeers,
+      up_rate_bps: upPeers * 55000,
     };
   }
 }

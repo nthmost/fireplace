@@ -39,6 +39,11 @@ const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(r *
 const sparks = [];
 const MAX_SPARKS = 420;
 
+// Smoke — only once a torrent is done (purely seeding) AND actively feeding peers.
+// Wisps lift off the coal bed, drift, expand, and fade; denser with more leechers.
+const smoke = [];
+const MAX_SMOKE = 150;
+
 // Width ratchet: a fire spreads across its fuel and holds that width even as it
 // dies down — so the flame's *width* only ever grows for a given torrent (height
 // still tracks live speed). It eases outward (never snaps) and never contracts.
@@ -68,6 +73,7 @@ export function draw(ctx, p, frame, W, H) {
   if (spreadKey !== fireSpread.key || p.fraction < fireSpread.frac - 0.05) {
     fireSpread = { key: spreadKey, frac: p.fraction, peak: 0 };
     sparks.length = 0;                       // fresh fire for a new torrent
+    smoke.length = 0;
   }
   fireSpread.frac = p.fraction;
   if (!done) {
@@ -231,6 +237,44 @@ export function draw(ctx, p, frame, W, H) {
     ctx.fillStyle = color;
     ctx.fillRect(Math.floor(px), Math.floor(baseY), Math.ceil(cell) - 1, Math.ceil(cell * 0.9));
   }
+
+  // ---- Smoke (seeding only) ------------------------------------------------
+  // Lifts off the coals when the torrent is done AND feeding peers; denser the
+  // more leechers are pulling from us.
+  const upPeers = p.up_peers || 0;
+  if (done && upPeers > 0) {
+    const rate = Math.min(1, upPeers / 6) * 0.9;      // wisps per frame
+    let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
+    const left = coalLeft + coalActive * 0.15;
+    const wspan = Math.max(1, coalActive * 0.7);
+    for (; n > 0 && smoke.length < MAX_SMOKE; n--) {
+      smoke.push({
+        x: areaX + (left + Math.random() * wspan) * cell,
+        y: baseY,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -(0.15 + Math.random() * 0.4),            // slow rise
+        life: 1,
+        decay: 0.004 + Math.random() * 0.006,
+        size: cell * (0.6 + Math.random() * 0.6),
+        grow: cell * (0.01 + Math.random() * 0.02),
+      });
+    }
+  }
+  for (let i = smoke.length - 1; i >= 0; i--) {
+    const s = smoke[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    s.vy *= 0.994;
+    s.vx += (Math.random() - 0.5) * 0.03;
+    s.size += s.grow;
+    s.life -= s.decay;
+    if (s.life <= 0 || s.y < fy + 2) { smoke.splice(i, 1); continue; }
+    const g = Math.round(70 + 80 * s.life);           // warmer/brighter near coals
+    ctx.globalAlpha = Math.min(0.26, s.life * 0.3);
+    ctx.fillStyle = `rgb(${g},${g - 6},${g - 14})`;
+    ctx.fillRect(Math.round(s.x), Math.round(s.y), Math.ceil(s.size), Math.ceil(s.size));
+  }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 

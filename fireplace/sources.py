@@ -25,12 +25,14 @@ class Progress:
     """A single snapshot of whatever the fire is mirroring."""
 
     fraction: float          # 0.0 .. 1.0  (how "smelted" / downloaded)
-    rate_bps: float = 0.0    # current throughput, bytes/sec (0 if unknown)
+    rate_bps: float = 0.0    # current download throughput, bytes/sec
     downloaded: int = 0      # bytes done   (0 if unknown)
     total: int = 0           # bytes total  (0 if unknown)
     name: str = ""           # torrent / item name
-    peers: int = 0           # connected peers (flavor)
+    peers: int = 0           # sources feeding us (download fuel)
     state: str = "active"    # active | paused | done | stalled
+    up_peers: int = 0        # peers downloading FROM us (seeding activity → smoke)
+    up_rate_bps: float = 0.0 # current upload throughput, bytes/sec
 
     @property
     def percent(self) -> float:
@@ -74,6 +76,7 @@ class SimulatedSource(ProgressSource):
         self._last_frac = 0.0
         self._peers = 2.0       # drifts smoothly (fuel shouldn't strobe the fire)
         self._rate_ema = 0.0    # smoothed throughput (ditto for flame height)
+        self._up = 0.0          # seeding peers once complete (drives the smoke)
 
     def _curve(self, t: float) -> float:
         # Slow start (connecting to peers), fast middle, taper at the end
@@ -111,6 +114,15 @@ class SimulatedSource(ProgressSource):
         peers = 0 if done else max(1, round(self._peers))
         state = "done" if done else ("stalled" if rate < 1 else "active")
 
+        # Once complete, simulate seeding to a drifting handful of leechers so the
+        # finished fire puffs smoke (no upload activity while still downloading).
+        if done:
+            self._up += 0.1 * (5.0 - self._up) + self._rng.uniform(-0.8, 0.8)
+            self._up = max(0.0, min(12.0, self._up))
+            up_peers = round(self._up) if self._up > 0.5 else 0
+        else:
+            up_peers = 0
+
         return Progress(
             fraction=min(1.0, frac),
             rate_bps=0.0 if done else rate,
@@ -119,6 +131,8 @@ class SimulatedSource(ProgressSource):
             name=self.name,
             peers=peers,
             state=state,
+            up_peers=up_peers,
+            up_rate_bps=up_peers * 55_000,
         )
 
 
@@ -141,7 +155,8 @@ class TransmissionSource(ProgressSource):
     """
 
     FIELDS = ["id", "name", "percentDone", "rateDownload", "sizeWhenDone",
-              "peersSendingToUs", "webseedsSendingToUs", "peersConnected", "status"]
+              "peersSendingToUs", "webseedsSendingToUs", "peersConnected", "status",
+              "peersGettingFromUs", "rateUpload"]
     # Transmission status codes → our state vocabulary.
     _STATUS = {0: "paused", 1: "stalled", 2: "stalled", 3: "stalled",
                4: "active", 5: "stalled", 6: "done"}
@@ -281,5 +296,7 @@ class TransmissionSource(ProgressSource):
             name=t["name"],
             peers=0 if done else int(round(self._peers_ema)),
             state=state,
+            up_peers=int(t.get("peersGettingFromUs", 0)),   # leechers we're feeding
+            up_rate_bps=float(t.get("rateUpload", 0.0)),
         )
         return self._cache
