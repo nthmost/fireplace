@@ -44,12 +44,13 @@ const MAX_SPARKS = 420;
 const smoke = [];
 const MAX_SMOKE = 150;
 
-// Width ratchet: a fire spreads across its fuel and holds that width even as it
-// dies down — so the flame's *width* only ever grows for a given torrent (height
-// still tracks live speed). It eases outward (never snaps) and never contracts.
-// Reset when the torrent changes or restarts.
-let fireSpread = { key: null, frac: 0, peak: 0 };
-const SPREAD_EASE = 0.03;   // how fast the fire creeps wider (smaller = slower)
+// Width ratchet, remembered PER TORRENT: a fire spreads across its fuel and holds
+// that width even as it dies down (height still tracks live speed). Keyed by
+// torrent so switching away and back resumes where it left off instead of
+// rebuilding. Eases outward (never snaps), only resets if that torrent restarts.
+const fireSpread = new Map();   // key -> { frac, peak }
+let lastKey = null;             // which torrent is currently on screen
+const SPREAD_EASE = 0.03;       // how fast the fire creeps wider (smaller = slower)
 
 function humanBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -67,23 +68,30 @@ export function draw(ctx, p, frame, W, H) {
   const coalFrac = Math.max(0, p.fraction);
   const coalHeat = done ? Math.max(heat, 0.45) : heat;
 
-  // Width ratchet (monotonic): the fire spreads but never contracts. Reset on a
-  // torrent switch (name change) or a restart (fraction jumps backwards).
-  const spreadKey = p.name || "";
-  if (spreadKey !== fireSpread.key || p.fraction < fireSpread.frac - 0.05) {
-    fireSpread = { key: spreadKey, frac: p.fraction, peak: 0 };
-    sparks.length = 0;                       // fresh fire for a new torrent
-    smoke.length = 0;
+  // Per-torrent width ratchet: each torrent remembers how wide it has spread, so
+  // switching away and back resumes instead of rebuilding from scratch. Only a
+  // true restart of that torrent (fraction jumps backwards) resets its width.
+  const spreadKey = p.id != null ? "id:" + p.id : "name:" + (p.name || "");
+  let spread = fireSpread.get(spreadKey);
+  if (!spread) {
+    spread = { frac: p.fraction, peak: 0 };
+    fireSpread.set(spreadKey, spread);
   }
-  fireSpread.frac = p.fraction;
+  if (p.fraction < spread.frac - 0.05) spread.peak = 0;   // this torrent restarted
+  spread.frac = p.fraction;
   if (!done) {
     // ease toward the current vigor, but never recede (max keeps it a ratchet)
-    fireSpread.peak = Math.max(
-      fireSpread.peak,
-      fireSpread.peak + (vigor - fireSpread.peak) * SPREAD_EASE
-    );
+    spread.peak = Math.max(spread.peak, spread.peak + (vigor - spread.peak) * SPREAD_EASE);
   }
-  const widthFrac = fireSpread.peak;         // flame width = widest it's ever been
+  const widthFrac = spread.peak;             // flame width = widest it's ever been
+
+  // The transient particle layers belong to the on-screen fire; clear them only
+  // when the viewed torrent actually changes (not every frame).
+  if (spreadKey !== lastKey) {
+    sparks.length = 0;
+    smoke.length = 0;
+    lastKey = spreadKey;
+  }
 
   ctx.clearRect(0, 0, W, H);
 
