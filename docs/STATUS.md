@@ -29,7 +29,7 @@ Three surfaces, one shared fire model (progress comes through a single
 - **`arc` scenarios**: `SimulatedSource` supports `arc: true`, which sweeps rate & seeders low→peak→low across the whole download (rateBand/seedBand read as `[start/end, peak]`). Used by Slow burn.
 - **Per-canvas state**: `makeFireState()` — each canvas (main + every thumbnail) owns its particles/ratchet/settings, so they don't interfere. (This was a required refactor for the thumbnails.)
 - **Controls**: `⛶`/`f` fullscreen (just the fire, square), `🔇`/`m` fire sound, `‹ ›`/`←→` cycle torrents (live, >1), `⚙` panel = Custom tuning. URL params: `?scenario=`, and for custom `?name=&size=&duration=&maxRate=&seeders=&fps=&loop=`.
-- **Fire sound** (`web/js/audio.js`): procedural Web Audio (no files) — roar (brown noise ∝ vigor), sizzle (white noise band-pass ∝ heat), random crackle pops (rate ∝ blaze). Muted by default; enabled on a user gesture.
+- **Fire sound** (`web/js/audio.js`): procedural Web Audio (no files) — a faint low rumble bed plus discrete, spaced crackle pops whose rate scales with heat. Muted by default; enabled on a user gesture. The design + full trial-and-error (what each attempt sounded like) is in [`docs/fire-audio.md`](fire-audio.md).
 
 ## Open / loose ends
 
