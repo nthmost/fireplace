@@ -48,31 +48,38 @@ export class FireAudio {
     bed.connect(lp).connect(this.bedGain).connect(this.master);
     bed.start();
 
-    // crackles go through their own bus
-    this.crackleBus = ctx.createGain(); this.crackleBus.gain.value = 1;
+    // crackles go through their own (slightly hotter) bus
+    this.crackleBus = ctx.createGain(); this.crackleBus.gain.value = 1.5;
     this.crackleBus.connect(this.master);
   }
 
-  // One pop: a short enveloped noise burst through a resonant filter. "tick" =
-  // bright snap, otherwise a deeper woody pop. Scheduled at absolute time `t`.
+  // One pop. "tick" = a bright broadband SNAP (high-pass, near-instant attack —
+  // not a tuned ring), otherwise a deeper woody pop. Scheduled at absolute `t`.
   _pop(t, loud) {
     const ctx = this.ctx;
     const tick = Math.random() < 0.72;
-    const dur = tick ? 0.002 + Math.random() * 0.006 : 0.01 + Math.random() * 0.022;
+    const dur = tick ? 0.003 + Math.random() * 0.007 : 0.012 + Math.random() * 0.022;
     const src = ctx.createBufferSource();
     src.buffer = this.white;
-    src.playbackRate.value = 0.7 + Math.random() * 1.8;
+    src.playbackRate.value = tick ? 1.2 + Math.random() * 1.8 : 0.6 + Math.random() * 1.0;
     const off = Math.random() * (this.white.duration - dur - 0.01);
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    if (tick) { bp.frequency.value = 1600 + Math.random() * 2800; bp.Q.value = 5 + Math.random() * 7; }
-    else { bp.frequency.value = 260 + Math.random() * 640; bp.Q.value = 2 + Math.random() * 4; }
+    const filt = ctx.createBiquadFilter();
+    if (tick) {
+      // high-pass keeps the bright, noisy transient → snap, not a raindrop plink
+      filt.type = "highpass";
+      filt.frequency.value = 1500 + Math.random() * 2600;
+      filt.Q.value = 0.6;
+    } else {
+      filt.type = "bandpass";
+      filt.frequency.value = 230 + Math.random() * 640;
+      filt.Q.value = 1.4 + Math.random() * 2.2;
+    }
     const g = ctx.createGain();
-    const peak = (tick ? 0.10 : 0.17) * loud * (0.55 + Math.random() * 0.45);
+    const peak = (tick ? 0.17 : 0.26) * loud * (0.6 + Math.random() * 0.4);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(peak, t + 0.0012);
+    g.gain.linearRampToValueAtTime(peak, t + 0.0005);   // ~0.5ms attack = sharp snap
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(bp).connect(g).connect(this.crackleBus);
+    src.connect(filt).connect(g).connect(this.crackleBus);
     src.start(t, off, dur + 0.02);
     src.stop(t + dur + 0.05);
   }
