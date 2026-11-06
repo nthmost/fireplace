@@ -61,14 +61,15 @@ export class FireAudio {
     const dur = tick ? 0.003 + Math.random() * 0.007 : 0.012 + Math.random() * 0.022;
     const src = ctx.createBufferSource();
     src.buffer = this.white;
-    src.playbackRate.value = tick ? 1.2 + Math.random() * 1.8 : 0.6 + Math.random() * 1.0;
+    src.playbackRate.value = tick ? 0.9 + Math.random() * 1.4 : 0.6 + Math.random() * 1.0;
     const off = Math.random() * (this.white.duration - dur - 0.01);
     const filt = ctx.createBiquadFilter();
     if (tick) {
-      // high-pass keeps the bright, noisy transient → snap, not a raindrop plink
-      filt.type = "highpass";
+      // band-pass with a MODERATE Q: some resonant "crack" body, but not the
+      // tonal high-Q plink (raindrop) nor the open high-pass hiss (ripping fabric)
+      filt.type = "bandpass";
       filt.frequency.value = 1500 + Math.random() * 2600;
-      filt.Q.value = 0.6;
+      filt.Q.value = 3 + Math.random() * 3.5;
     } else {
       filt.type = "bandpass";
       filt.frequency.value = 230 + Math.random() * 640;
@@ -77,7 +78,7 @@ export class FireAudio {
     const g = ctx.createGain();
     const peak = (tick ? 0.17 : 0.26) * loud * (0.6 + Math.random() * 0.4);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(peak, t + 0.0005);   // ~0.5ms attack = sharp snap
+    g.gain.linearRampToValueAtTime(peak, t + 0.001);    // ~1ms attack: snappy, not harsh
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(filt).connect(g).connect(this.crackleBus);
     src.start(t, off, dur + 0.02);
