@@ -1,6 +1,6 @@
 # 🔥 fireplace
 
-A digital **Minecraft-furnace** that mirrors the progress of a torrent — as a
+A digital Minecraft-inspired furnace that mirrors the progress of a torrent, both as a
 zero-dependency terminal animation and as a web page.
 
 **Live demo (simulated): https://fireplace.nthmost.com**
