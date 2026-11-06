@@ -25,7 +25,8 @@ Three surfaces, one shared fire model (progress comes through a single
 
 ## Web specifics
 
-- **Scenario sidebar** (left): a live mini-fire thumbnail per preset — Healthy, Rare (1–3 seeders), 12 GB seeding (8–20, uploads too), Flash crowd — plus **Live** when a backend is present. Click to switch the main view.
+- **Scenario sidebar** (left): a live mini-fire thumbnail per preset — **Slow burn** (60 min `arc`: builds rare→healthy, fades, then seeds to ~5), Healthy, Rare (1–3 seeders), 12 GB seeding (8–20, uploads too), Flash crowd — plus **Live** when a backend is present. Click to switch the main view.
+- **`arc` scenarios**: `SimulatedSource` supports `arc: true`, which sweeps rate & seeders low→peak→low across the whole download (rateBand/seedBand read as `[start/end, peak]`). Used by Slow burn.
 - **Per-canvas state**: `makeFireState()` — each canvas (main + every thumbnail) owns its particles/ratchet/settings, so they don't interfere. (This was a required refactor for the thumbnails.)
 - **Controls**: `⛶`/`f` fullscreen (just the fire, square), `‹ ›`/`←→` cycle torrents (live, >1), `⚙` panel = Custom tuning. URL params: `?scenario=`, and for custom `?name=&size=&duration=&maxRate=&seeders=&fps=&loop=`.
 

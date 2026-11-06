@@ -71,10 +71,14 @@ export class SimulatedSource {
     //   seedBias 0..1             — higher = cluster toward the low end ("usually 1")
     //   upBand   [min,max]        — peers downloading FROM us (seeding → smoke),
     //                               active even while still downloading
+    //   arc      true             — sweep rate & seeders low→high→low over the
+    //                               whole download (a slow build then fade), so
+    //                               rateBand/seedBand are read as [start/end, peak]
     this.rateBand = opts.rateBand ?? null;
     this.seedBand = opts.seedBand ?? null;
     this.seedBias = opts.seedBias ?? 0.3;
     this.upBand = opts.upBand ?? null;
+    this.arc = opts.arc ?? false;
     this.reset();
   }
 
@@ -97,13 +101,17 @@ export class SimulatedSource {
     const now = performance.now() / 1000;
     const frac = this._curve(now - this._start);
     const done = frac >= 0.999;
-    const momentum = 0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, frac)); // slow at ends
+    const bell = Math.sin(Math.PI * Math.min(1, frac));        // 0 → 1 (mid) → 0
+    const momentum = 0.35 + 0.65 * bell;                        // steady ebb (never 0)
+    // In arc mode the whole download swells then fades: start/end sit at the band
+    // floor, the peak at the band top.
+    const shape = this.arc ? bell : momentum;
 
     // --- download rate → flame height ---
     if (this.rateBand) {
-      // band-driven: a realistic speed that ebbs with the download's momentum
+      // band-driven: speed follows `shape` across the download
       const [lo, hi] = this.rateBand;
-      const target = (lo + (hi - lo) * momentum) * (1 + (Math.random() * 0.5 - 0.25)) * 1e6;
+      const target = (lo + (hi - lo) * shape) * (1 + (Math.random() * 0.5 - 0.25)) * 1e6;
       this._rateEma = 0.92 * this._rateEma + 0.08 * target;
     } else {
       // derive from fraction moved (original behaviour)
@@ -122,7 +130,10 @@ export class SimulatedSource {
       this._peers = this.fixedSeeders;
     } else if (this.seedBand) {
       const [lo, hi] = this.seedBand;
-      const mean = lo + (hi - lo) * (1 - this.seedBias) * 0.5;   // biased toward lo
+      // arc: seeders swell lo→hi→lo with the download; else hover at a low-biased mean
+      const mean = this.arc
+        ? lo + (hi - lo) * shape
+        : lo + (hi - lo) * (1 - this.seedBias) * 0.5;
       this._peers += 0.08 * (mean - this._peers) + (Math.random() - 0.5) * 1.5;
       this._peers = Math.max(lo, Math.min(hi, this._peers));
     } else {
@@ -139,7 +150,10 @@ export class SimulatedSource {
     let upTarget;
     if (this.upBand) upTarget = (this.upBand[0] + this.upBand[1]) / 2;
     else upTarget = done ? 5 : 0;
-    this._up += 0.1 * (upTarget - this._up) + (Math.random() * 1.6 - 0.8);
+    // only jitter when there's actually seeding happening, so a no-upBand download
+    // stays smoke-free until it completes (then drifts to ~5 leechers)
+    const upNoise = upTarget > 0 ? Math.random() * 1.6 - 0.8 : 0;
+    this._up += 0.1 * (upTarget - this._up) + upNoise;
     const upHi = this.upBand ? this.upBand[1] : 12;
     this._up = Math.max(0, Math.min(upHi, this._up));
     const upPeers = this._up > 0.5 ? Math.round(this._up) : 0;

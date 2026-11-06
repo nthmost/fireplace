@@ -17,6 +17,9 @@ const DEFAULTS = {
 // character bands: rateBand [MB/s], seedBand [count], seedBias (→ low end),
 // upBand [peers we seed to]. See SimulatedSource.
 const SCENARIOS = {
+  epic: { label: "Slow burn", sub: "60 min · builds, fades, seeds",
+    name: "the-complete-archive-4k-remaster.mkv", size: 6, duration: 3600, maxRate: 4,
+    arc: true, rateBand: [0.03, 3.5], seedBand: [1, 22], seedBias: 0.5 },
   healthy: { label: "Healthy", sub: "steady swarm",
     name: "ubuntu-25.10-desktop-amd64.iso", size: 1.4, duration: 45, maxRate: 5 },
   rare: { label: "Rare", sub: "1–3 seeders · crawls",
@@ -30,7 +33,7 @@ const SCENARIOS = {
     rateBand: [2, 9], seedBand: [50, 180], seedBias: 0.3, upBand: [15, 45] },
   custom: { label: "Custom", sub: "⚙ panel" },
 };
-const PRESET_ORDER = ["healthy", "rare", "big", "flash"];
+const PRESET_ORDER = ["epic", "healthy", "rare", "big", "flash"];
 
 const validScenario = (k) => k === "live" || !!SCENARIOS[k];
 
@@ -107,6 +110,7 @@ function buildSource() {
     duration: cfg.duration, sizeGB: cfg.size, name: cfg.name,
     seeders: cfg.seeders !== "" && cfg.seeders != null ? Number(cfg.seeders) : null,
     rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
+    arc: sc.arc,
   });
 }
 
@@ -262,8 +266,9 @@ function buildSidebar() {
       src = new SimulatedSource({
         duration: 300, sizeGB: sc.size, name: sc.name,
         rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
+        arc: sc.arc,
       });
-      src._start = performance.now() / 1000 - 120;   // start mid-download
+      src._start = performance.now() / 1000 - (sc.arc ? 150 : 120);   // mid-download (peak for arc)
       for (let i = 0; i < 160; i++) draw(tctx, src.poll(), i, THUMB_W, THUMB_H, state); // warm up
     }
     thumbs.push({ key, ctx: tctx, src, state, frame: 160, W: THUMB_W, H: THUMB_H });
