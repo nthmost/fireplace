@@ -87,6 +87,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "done": p.is_done,
                 "up_peers": p.up_peers,
                 "up_rate_bps": p.up_rate_bps,
+                "piece_bytes": p.piece_bytes,
                 "id": cur,
                 "index": index,
                 "count": len(torrents),

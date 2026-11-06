@@ -19,7 +19,7 @@ export class LiveSource {
     this._latest = {
       fraction: 0, rate_bps: 0, downloaded: 0, total: 0,
       name: "…", peers: 0, state: "stalled", done: false,
-      id: null, index: 0, count: 0, torrents: [],
+      id: null, index: 0, count: 0, torrents: [], piece_bytes: 0,
     };
     this._tick();
     this._timer = setInterval(() => this._tick(), refreshMs);
@@ -79,6 +79,9 @@ export class SimulatedSource {
     this.seedBias = opts.seedBias ?? 0.3;
     this.upBand = opts.upBand ?? null;
     this.arc = opts.arc ?? false;
+    // nominal BitTorrent piece size (real torrents target ~1000-2000 pieces),
+    // clamped to a plausible 256KB..4MB. Drives the "pieces" audio mode.
+    this.pieceBytes = Math.max(262144, Math.min(4194304, Math.round(this.totalBytes / 1500)));
     this.reset();
   }
 
@@ -169,6 +172,7 @@ export class SimulatedSource {
       done,
       up_peers: upPeers,
       up_rate_bps: upPeers * 55000,
+      piece_bytes: this.pieceBytes,
     };
   }
 }

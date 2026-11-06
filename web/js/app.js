@@ -14,7 +14,9 @@ const DEFAULTS = {
   name: "ubuntu-25.10-desktop-amd64.iso",
   size: 1.4, duration: 45, maxRate: 5, seeders: "", fps: 24, loop: true,
   scenario: "healthy",
+  snd: "pieces",   // sound-meaning mode: aesthetic | pieces | events
 };
+const SND_MODES = ["aesthetic", "pieces", "events"];
 
 // Preset demos. Each sets the visible fields and (except 'custom') the sim's
 // character bands: rateBand [MB/s], seedBand [count], seedBias (→ low end),
@@ -53,6 +55,7 @@ function readConfig() {
     fps: num("fps", DEFAULTS.fps),
     loop: q.has("loop") ? q.get("loop") !== "0" && q.get("loop") !== "false" : DEFAULTS.loop,
     scenario,
+    snd: SND_MODES.includes(q.get("snd")) ? q.get("snd") : DEFAULTS.snd,
   };
   const s = SCENARIOS[scenario];
   if (s && scenario !== "custom") {   // a preset drives the fields unless overridden
@@ -76,6 +79,7 @@ function writeConfigToURL(cfg) {
   }
   q.set("fps", cfg.fps);
   q.set("loop", cfg.loop ? "1" : "0");
+  q.set("snd", cfg.snd);
   history.replaceState(null, "", "?" + q.toString());
 }
 
@@ -151,7 +155,8 @@ function loop(now) {
   const p = source.poll();
   const r = draw(ctx, p, frame, dims.W, dims.H, fireState);
   updateReadout(r);
-  fireAudio.update(r.vigor, r.heat, r.done);
+  const pieceRate = p.piece_bytes > 0 ? p.rate_bps / p.piece_bytes : 0;  // pieces/sec
+  fireAudio.update(r.vigor, r.heat, r.done, { pieceRate, upPeers: p.up_peers || 0 });
   if (isLive()) updateNav(p);
   frame++;
 
@@ -220,6 +225,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight") cycle(1);
   else if (e.key === "f" || e.key === "F") toggleFullscreen();
   else if (e.key === "m" || e.key === "M") toggleAudio();
+  else if (e.key === "s" || e.key === "S") cycleSnd();
 });
 
 // ---- fire sound (procedural, muted by default) ----------------------------
@@ -230,6 +236,18 @@ function toggleAudio() {
   btn.classList.toggle("on", on);
 }
 el("audio").addEventListener("click", toggleAudio);
+
+// Sound-meaning mode: aesthetic | pieces | events (experiment live)
+function setSndMode(m) {
+  cfg.snd = m;
+  fireAudio.setMode(m);
+  if (el("c-snd")) el("c-snd").value = m;
+  writeConfigToURL(cfg);
+}
+if (el("c-snd")) el("c-snd").addEventListener("change", (e) => setSndMode(e.target.value));
+function cycleSnd() {
+  setSndMode(SND_MODES[(SND_MODES.indexOf(cfg.snd) + 1) % SND_MODES.length]);
+}
 
 // ---- scenario sidebar (live mini-fire thumbnails) -------------------------
 const THUMB_W = 150, THUMB_H = 96;
@@ -298,6 +316,7 @@ function updateSidebarActive() {
 
 // ---- control panel (custom tuning) ----------------------------------------
 function syncControls() {
+  if (el("c-snd")) el("c-snd").value = cfg.snd;
   el("c-name").value = cfg.name;
   el("c-size").value = cfg.size;
   el("c-duration").value = cfg.duration;
@@ -356,6 +375,7 @@ el("fullscreen").addEventListener("click", toggleFullscreen);
   } else if (cfg.scenario === "live") {
     cfg.scenario = "healthy";   // no backend → can't go live
   }
+  fireAudio.setMode(cfg.snd);
   buildSidebar();
   start();
   requestAnimationFrame(loop);

@@ -33,6 +33,7 @@ class Progress:
     state: str = "active"    # active | paused | done | stalled
     up_peers: int = 0        # peers downloading FROM us (seeding activity → smoke)
     up_rate_bps: float = 0.0 # current upload throughput, bytes/sec
+    piece_bytes: int = 0     # torrent piece size (drives the "pieces" audio mode)
 
     @property
     def percent(self) -> float:
@@ -133,6 +134,7 @@ class SimulatedSource(ProgressSource):
             state=state,
             up_peers=up_peers,
             up_rate_bps=up_peers * 55_000,
+            piece_bytes=max(262_144, min(4_194_304, self.total_bytes // 1500)),
         )
 
 
@@ -156,7 +158,7 @@ class TransmissionSource(ProgressSource):
 
     FIELDS = ["id", "name", "percentDone", "rateDownload", "sizeWhenDone",
               "peersSendingToUs", "webseedsSendingToUs", "peersConnected", "status",
-              "peersGettingFromUs", "rateUpload"]
+              "peersGettingFromUs", "rateUpload", "pieceSize"]
     # Transmission status codes → our state vocabulary.
     _STATUS = {0: "paused", 1: "stalled", 2: "stalled", 3: "stalled",
                4: "active", 5: "stalled", 6: "done"}
@@ -298,5 +300,6 @@ class TransmissionSource(ProgressSource):
             state=state,
             up_peers=int(t.get("peersGettingFromUs", 0)),   # leechers we're feeding
             up_rate_bps=float(t.get("rateUpload", 0.0)),
+            piece_bytes=int(t.get("pieceSize", 0)),
         )
         return self._cache

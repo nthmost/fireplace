@@ -207,6 +207,8 @@ body.fs .stage {
 .legend dd { margin: 0; color: var(--dim); }
 
 footer { margin-top: 30px; color: #5a4d3c; font-size: 11px; letter-spacing: 0.05em; }
+footer a { color: #a8814f; text-decoration: none; }
+footer a:hover { color: #d9a455; text-decoration: underline; }
 
 @media (max-width: 480px) {
   .grid { grid-template-columns: 1fr; }
