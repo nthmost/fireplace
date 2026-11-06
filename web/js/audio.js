@@ -85,31 +85,33 @@ export class FireAudio {
     src.stop(t + dur + 0.05);
   }
 
-  // A crackle "event" is usually a single pop, sometimes a quick little roll.
+  // A crackle "event" is usually a single pop; occasionally a distinct double/
+  // triple "knock" — but spaced widely (80–160ms) so it never buzzes/rips.
+  // Returns the time of the last pop, so the next event can be spaced from there.
   _emit(t) {
     const loud = 0.5 + 0.5 * this._v;
-    let n = 1;
-    if (Math.random() < 0.35) n++;
-    if (Math.random() < 0.15) n++;
-    let tt = t;
-    for (let i = 0; i < n; i++) {
-      this._pop(tt, loud);
-      tt += 0.012 + Math.random() * 0.055;
-    }
+    let last = t;
+    this._pop(last, loud);
+    if (Math.random() < 0.16) { last += 0.08 + Math.random() * 0.08; this._pop(last, loud * 0.85); }
+    if (Math.random() < 0.04) { last += 0.08 + Math.random() * 0.08; this._pop(last, loud * 0.7); }
+    return last;
   }
 
-  // Scheduler (~16ms). Emits due events and picks the next gap from an exponential
-  // distribution — mean gap shrinks as heat rises, so a cold fire is nearly silent
-  // with long pauses and a hot one crackles busily.
+  // Scheduler (~16ms). The gap to the next event = a hard MIN_GAP + an exponential
+  // term, measured from the END of the previous cluster — so pops never bunch up
+  // (what read as heavy rain / ripping). Mean gap shrinks with heat; top rate is
+  // capped so even a roaring fire stays spacious.
   _tick() {
     if (!this.enabled || !this.ctx) return;
     const now = this.ctx.currentTime;
+    const MIN_GAP = 0.11;
     if (this._next < now) this._next = now;
     while (this._next <= now + 0.05) {
-      this._emit(this._next);
-      const rate = 0.45 + 9 * this._h * (0.4 + 0.6 * this._v) + (this._done ? 0.25 : 0);
-      const meanGap = 1 / Math.max(0.25, rate);
-      this._next += -Math.log(Math.random() + 1e-6) * meanGap;
+      const end = this._emit(this._next);
+      const intensity = this._h * (0.45 + 0.55 * this._v);
+      const rate = 0.7 + 4.8 * intensity + (this._done ? 0.2 : 0);   // ~0.7 .. ~5.5 /s
+      const meanGap = 1 / Math.max(0.3, rate);
+      this._next = end + MIN_GAP + (-Math.log(Math.random() + 1e-6)) * meanGap;
     }
   }
 
