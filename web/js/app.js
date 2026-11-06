@@ -6,6 +6,9 @@
 
 import { SimulatedSource, LiveSource, liveBackendAvailable } from "./sources.js";
 import { draw, makeFireState } from "./furnace.js";
+import { FireAudio } from "./audio.js";
+
+const fireAudio = new FireAudio();
 
 const DEFAULTS = {
   name: "ubuntu-25.10-desktop-amd64.iso",
@@ -148,6 +151,7 @@ function loop(now) {
   const p = source.poll();
   const r = draw(ctx, p, frame, dims.W, dims.H, fireState);
   updateReadout(r);
+  fireAudio.update(r.vigor, r.heat, r.done);
   if (isLive()) updateNav(p);
   frame++;
 
@@ -215,7 +219,17 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") cycle(-1);
   else if (e.key === "ArrowRight") cycle(1);
   else if (e.key === "f" || e.key === "F") toggleFullscreen();
+  else if (e.key === "m" || e.key === "M") toggleAudio();
 });
+
+// ---- fire sound (procedural, muted by default) ----------------------------
+function toggleAudio() {
+  const on = fireAudio.toggle();
+  const btn = el("audio");
+  btn.textContent = on ? "🔊" : "🔇";
+  btn.classList.toggle("on", on);
+}
+el("audio").addEventListener("click", toggleAudio);
 
 // ---- scenario sidebar (live mini-fire thumbnails) -------------------------
 const THUMB_W = 150, THUMB_H = 96;

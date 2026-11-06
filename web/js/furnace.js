@@ -309,6 +309,9 @@ export function draw(ctx, p, frame, W, H, state = _defaultState) {
     state: p.state,
     name: p.name,
     done,
+    vigor,           // 0..1 flame height — drives audio roar/crackle
+    heat,            // 0..1 seeders — drives audio sizzle/crackle
+    up: p.up_peers || 0,
   };
 }
 
