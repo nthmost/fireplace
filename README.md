@@ -86,8 +86,21 @@ cd web && python3 -m http.server 8000      # then open http://localhost:8000
 
 - **⛶ / `f`** — fullscreen: hides all chrome and fills the screen with just the
   fire, centred as a square (`Esc` or `f` to exit)
+- **🔊 / `m`** — procedural fire sound (synthesized, muted by default)
+- **`s`** — cycle the sound's *meaning* (see below)
 - **‹ / ›** or **← / →** — cycle torrents (live mode, >1 torrent)
-- **⚙** — the config panel (simulated mode only; hidden when mirroring a torrent)
+- **⚙** — the config panel (sidebar scenarios + Custom tuning + sound mapping)
+
+### Fire sound
+
+Procedural (no audio files) and reactive. Its **meaning is selectable** (⚙ panel
+"Sound mapping", `s` to cycle, `?snd=` to share) — see
+[`docs/fire-audio.md`](docs/fire-audio.md) for the full design:
+
+- **aesthetic** — crackle rate by ear (heat × speed)
+- **pieces** — crackle rate = download speed ÷ piece size; each pop ≈ a file
+  piece landing; seeders warm the bed
+- **events** — pieces, plus a soft exhale while you're seeding to peers
 
 ### Config vars
 

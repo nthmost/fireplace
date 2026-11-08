@@ -29,7 +29,8 @@ Three surfaces, one shared fire model (progress comes through a single
 - **`arc` scenarios**: `SimulatedSource` supports `arc: true`, which sweeps rate & seeders low→peak→low across the whole download (rateBand/seedBand read as `[start/end, peak]`). Used by Slow burn.
 - **Per-canvas state**: `makeFireState()` — each canvas (main + every thumbnail) owns its particles/ratchet/settings, so they don't interfere. (This was a required refactor for the thumbnails.)
 - **Controls**: `⛶`/`f` fullscreen (just the fire, square), `🔇`/`m` fire sound, `‹ ›`/`←→` cycle torrents (live, >1), `⚙` panel = Custom tuning. URL params: `?scenario=`, and for custom `?name=&size=&duration=&maxRate=&seeders=&fps=&loop=`.
-- **Fire sound** (`web/js/audio.js`): procedural Web Audio (no files) — a faint low rumble bed plus discrete, spaced crackle pops whose rate scales with heat. Muted by default; enabled on a user gesture. The design + full trial-and-error (what each attempt sounded like) is in [`docs/fire-audio.md`](fire-audio.md).
+- **Fire sound** (`web/js/audio.js`): procedural Web Audio (no files) — a faint low rumble bed plus discrete, spaced crackle pops. Muted by default; enabled on a user gesture (🔊/`m`). **Meaning is selectable** (⚙ "Sound mapping", `s` cycles, `?snd=`): `aesthetic` (heat×speed by ear), `pieces` (crackle = speed ÷ piece size, each pop ≈ a file piece; seeders → bed warmth), `events` (pieces + a soft exhale while seeding). Piece size plumbed via `Progress.piece_bytes` (real `pieceSize` live, `total/1500` sim). Design + full trial-and-error in [`docs/fire-audio.md`](fire-audio.md).
+  - **OPEN:** which mode becomes the real default is undecided — pending listening across scenarios. `pieces` is physically sparse on large-piece torrents (may be too empty); lever is nominal piece size.
 
 ## Open / loose ends
 

@@ -55,12 +55,52 @@ Three layers, in `web/js/audio.js`:
 Measured: at any intensity the closest two pops are ~80 ms apart; rate scales
 ~1.0 → ~3.8 pops/s with heat.
 
+## What the sound *means* (semantic modes)
+
+The iterations above got the crackle to *sound* right, but the mapping was
+aesthetic — crackle rate was a by-ear `heat × speed` blend that gestured at the
+torrent without corresponding to anything you could point at. The question then
+became: can the sound relate to something *real* about the torrent, even if we
+nudge the effects because we want them to mean more?
+
+The honest grounding we found: a torrent's one true discrete, countable event is
+**a piece of the file arriving**. BitTorrent downloads in pieces (the torrent's
+`pieceSize`), so `crackle rate = download speed ÷ piece size` makes each pop ≈ one
+piece landing — not a fudge, a physical quantity. That frees the other real
+signals to each get their own voice (seeders → the warmth of the bed; seeding to
+others → a distinct soft sound).
+
+Rather than pick one blind, we made it a **live, in-page experiment** — a
+swappable mode so you can A/B them against the real fire. Selector in the ⚙ panel
+("Sound mapping"), the **`s`** key cycles, and `?snd=` persists/shares it.
+
+| Mode | Crackle rate | Seeders | Extra |
+|------|-------------|---------|-------|
+| **aesthetic** | `heat × speed` blend (by ear; the pre-meaning feel) | → crackle rate | — |
+| **pieces** *(default)* | **speed ÷ piece size** — each pop ≈ a file piece | → bed warmth | silent when nothing's arriving (e.g. done) |
+| **events** | same as pieces | → bed warmth | + a soft low **exhale** (`_whoosh`) whenever we're seeding to a peer, so *receiving* (sharp crackle) and *giving* (breath) sound different |
+
+Piece size is plumbed end-to-end: `Progress.piece_bytes` ← Transmission's real
+`pieceSize` (live monitor) or a nominal `total/1500` clamped 256 KB–4 MB
+(simulated); exposed via `/api/progress`; `app.js` computes `pieceRate =
+rate_bps / piece_bytes` and passes it to `FireAudio.update(..., {pieceRate,
+upPeers})`. `FireAudio` carries a `mode` and `_crackleRate()` switches on it.
+
+**The honest trade-off to listen for:** `pieces` is *physically* sparse on
+large-piece torrents — e.g. "Slow burn" (6 GB → ~4 MB pieces) crackles < 1×/sec
+even at its peak. That sparseness *is* the meaning (and may be gorgeous or may
+feel empty). `aesthetic` is the busier fallback. **Undecided** which becomes the
+real default — pending listening across scenarios; if `pieces` feels too empty,
+the lever is the nominal piece size (smaller → more crackles per MB).
+
 ## Tuning knobs (all in `web/js/audio.js`)
 
 | Want | Change |
 |------|--------|
-| sparser / busier | `MIN_GAP` (0.11) up/down, and the `4.8 * intensity` rate term |
+| sparser / busier (aesthetic) | `MIN_GAP` (0.11) up/down, and the `4.8 * intensity` rate term |
+| more/fewer crackles per MB (pieces) | the nominal piece size in the sources (`total/1500`), smaller = more |
 | crack vs plink vs rip | tick filter **Q** (↑ ~7 = more defined pluck, ↓ ~2 = more open snap) |
 | louder / softer | `crackleBus` gain (1.5) and/or `this.volume` (0.9) |
 | snappier / softer attack | the `t + 0.001` attack ramp in `_pop` |
 | more/less low warmth | the bed gain in `update()` |
+| the "give" exhale (events) | `_whoosh()` shape + the `giveRate` in `_tick` |

@@ -36,9 +36,15 @@ const SCENARIOS = {
   flash: { label: "Flash crowd", sub: "huge swarm · white-hot",
     name: "big-buck-bunny-4k-remaster.mkv", size: 4.2, duration: 60, maxRate: 10,
     rateBand: [2, 9], seedBand: [50, 180], seedBias: 0.3, upBand: [15, 45] },
+  flashpan: { label: "Flash in the Pan", sub: "5 min · bright, then gone",
+    name: "winter-cabin-timelapse-4k.mkv", size: 1.2, duration: 300, maxRate: 5,
+    profile: "flameout", rateBand: [0.04, 4], seedBand: [1, 14], seedBias: 0.4, upBand: [1, 3] },
+  dyinglight: { label: "Dying of the Light", sub: "12 min · burns, then dark",
+    name: "the-long-dark-restoration-2025.mkv", size: 3.6, duration: 720, maxRate: 5,
+    profile: "flameout", rateBand: [0.04, 4], seedBand: [1, 14], seedBias: 0.4, upBand: [1, 3] },
   custom: { label: "Custom", sub: "⚙ panel" },
 };
-const PRESET_ORDER = ["epic", "healthy", "rare", "big", "flash"];
+const PRESET_ORDER = ["epic", "healthy", "rare", "big", "flash", "flashpan", "dyinglight"];
 
 const validScenario = (k) => k === "live" || !!SCENARIOS[k];
 
@@ -117,7 +123,7 @@ function buildSource() {
     duration: cfg.duration, sizeGB: cfg.size, name: cfg.name,
     seeders: cfg.seeders !== "" && cfg.seeders != null ? Number(cfg.seeders) : null,
     rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
-    arc: sc.arc,
+    arc: sc.arc, profile: sc.profile,
   });
 }
 
@@ -298,9 +304,9 @@ function buildSidebar() {
       src = new SimulatedSource({
         duration: 300, sizeGB: sc.size, name: sc.name,
         rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
-        arc: sc.arc,
+        arc: sc.arc, profile: sc.profile,
       });
-      src._start = performance.now() / 1000 - (sc.arc ? 150 : 120);   // mid-download (peak for arc)
+      src._start = performance.now() / 1000 - (sc.arc ? 150 : 120);   // mid-download (peak for arc, plateau for flameout)
       for (let i = 0; i < 160; i++) draw(tctx, src.poll(), i, THUMB_W, THUMB_H, state); // warm up
     }
     thumbs.push({ key, ctx: tctx, src, state, frame: 160, W: THUMB_W, H: THUMB_H });

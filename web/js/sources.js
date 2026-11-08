@@ -8,6 +8,21 @@ export function seedersToHeat(peers) {
   return 1 - Math.exp(-Math.max(0, peers) / 12);
 }
 
+// A "flameout" download: smoulders slowly, climbs to a healthy blaze and holds
+// there, then is cut out abruptly at the very end — no gentle fade like `arc`.
+// Returns a 0..1 intensity for the given download fraction.
+export function flameoutShape(x) {
+  const RAMP = 0.15;   // first 15%: slow ember → healthy
+  const CLIFF = 0.9;   // last 10%: the sudden cutout
+  if (x < RAMP) {
+    const u = x / RAMP;
+    return 0.08 + 0.92 * (u * u * (3 - 2 * u));   // smootherstep ember → full
+  }
+  if (x < CLIFF) return 1;                          // healthy plateau
+  const u = (x - CLIFF) / (1 - CLIFF);             // 0..1 across the final 10%
+  return (1 - u) ** 4;                              // quartic crash to 0
+}
+
 // Live source: polls a backend's /api/progress, which mirrors a real Transmission
 // torrent. Same shape as SimulatedSource. The fetch is async but the furnace
 // renders every frame, so we keep the latest snapshot and return it synchronously
@@ -79,6 +94,9 @@ export class SimulatedSource {
     this.seedBias = opts.seedBias ?? 0.3;
     this.upBand = opts.upBand ?? null;
     this.arc = opts.arc ?? false;
+    //   profile  "flameout"    — slow ember → healthy plateau → abrupt cutout
+    //                            (rateBand/seedBand read as [floor, healthy]).
+    this.profile = opts.profile ?? null;
     // nominal BitTorrent piece size (real torrents target ~1000-2000 pieces),
     // clamped to a plausible 256KB..4MB. Drives the "pieces" audio mode.
     this.pieceBytes = Math.max(262144, Math.min(4194304, Math.round(this.totalBytes / 1500)));
@@ -107,8 +125,12 @@ export class SimulatedSource {
     const bell = Math.sin(Math.PI * Math.min(1, frac));        // 0 → 1 (mid) → 0
     const momentum = 0.35 + 0.65 * bell;                        // steady ebb (never 0)
     // In arc mode the whole download swells then fades: start/end sit at the band
-    // floor, the peak at the band top.
-    const shape = this.arc ? bell : momentum;
+    // floor, the peak at the band top. In flameout mode it climbs to a healthy
+    // plateau and is cut off abruptly. Both read bands as [floor, peak].
+    const shape = this.profile === "flameout" ? flameoutShape(Math.min(1, frac))
+                : this.arc ? bell
+                : momentum;
+    const shapeDriven = this.arc || this.profile === "flameout";
 
     // --- download rate → flame height ---
     if (this.rateBand) {
@@ -133,8 +155,9 @@ export class SimulatedSource {
       this._peers = this.fixedSeeders;
     } else if (this.seedBand) {
       const [lo, hi] = this.seedBand;
-      // arc: seeders swell lo→hi→lo with the download; else hover at a low-biased mean
-      const mean = this.arc
+      // arc/flameout: seeders follow the shape (swell/plateau then drop); else
+      // hover at a low-biased mean
+      const mean = shapeDriven
         ? lo + (hi - lo) * shape
         : lo + (hi - lo) * (1 - this.seedBias) * 0.5;
       this._peers += 0.08 * (mean - this._peers) + (Math.random() - 0.5) * 1.5;
