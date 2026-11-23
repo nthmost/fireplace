@@ -61,8 +61,8 @@ main {
   width: 100%; height: auto; display: block;
   border-radius: 5px; image-rendering: pixelated; background: #0a0604;
 }
-.scene-label { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
-.scene-label strong { font-size: 12px; color: #ffcf6b; font-weight: 600; }
+.scene-label { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; min-width: 0; }
+.scene-label strong { font-size: 12px; color: #ffcf6b; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scene-label span { font-size: 10px; color: var(--dim); }
 
 body.fs #sidebar { display: none; }

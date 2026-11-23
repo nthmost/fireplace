@@ -99,6 +99,8 @@ let liveAvailable = false;   // backend present?
 let liveSource = null;
 let navTorrents = [];
 let navIndex = 0;
+let currentTorrentId = null;         // which real torrent is the big fire (live mode)
+let liveThumbIds = [];               // ids the sidebar windows currently represent
 const fireState = makeFireState();   // the main canvas's own particle/ratchet state
 let thumbs = [];                     // sidebar mini-fires
 
@@ -204,6 +206,8 @@ function updateReadout(r) {
 function updateNav(p) {
   navTorrents = p.torrents || [];
   navIndex = p.index || 0;
+  if (p.id != null) currentTorrentId = p.id;
+  syncTorrentWindows(navTorrents);   // a window per real torrent; rebuilds on change
   const show = navTorrents.length > 1;
   el("nav-prev").style.display = show ? "flex" : "none";
   el("nav-next").style.display = show ? "flex" : "none";
@@ -219,8 +223,19 @@ function updateNav(p) {
 function cycle(delta) {
   if (!isLive() || navTorrents.length < 2) return;
   const n = navTorrents.length;
-  navIndex = (((navIndex + delta) % n) + n) % n;
-  liveSource.setId(navTorrents[navIndex].id);
+  const i = (((navIndex + delta) % n) + n) % n;
+  selectTorrent(navTorrents[i].id);
+}
+
+// Make a specific real torrent the big fire (sidebar click or ←/→). Also flips
+// out of a deep-linked sim scenario back into live mode.
+function selectTorrent(id) {
+  if (!isLive()) { cfg.scenario = "live"; writeConfigToURL(cfg); start(); }
+  currentTorrentId = id;
+  const i = navTorrents.findIndex((t) => t.id === id);
+  if (i >= 0) navIndex = i;
+  liveSource.setId(id);
+  updateSidebarActive();
 }
 
 el("nav-prev").addEventListener("click", () => cycle(-1));
@@ -255,68 +270,103 @@ function cycleSnd() {
   setSndMode(SND_MODES[(SND_MODES.indexOf(cfg.snd) + 1) % SND_MODES.length]);
 }
 
-// ---- scenario sidebar (live mini-fire thumbnails) -------------------------
+// ---- sidebar --------------------------------------------------------------
+// Live backend present → one small window per REAL torrent (click to promote it
+// to the big fire). No backend (public demo) → the preset scenario gallery.
 const THUMB_W = 150, THUMB_H = 96;
 
-function buildSidebar() {
-  const bar = el("sidebar");
-  bar.innerHTML = "";
+function disposeThumbs() {
+  for (const t of thumbs) t.src?.dispose?.();   // stop any per-torrent pollers
   thumbs = [];
-  const keys = [];
-  if (liveAvailable) keys.push("live");
-  keys.push(...PRESET_ORDER);
+}
 
-  for (const key of keys) {
-    const meta = key === "live"
-      ? { label: "Live", sub: "real torrent" }
-      : SCENARIOS[key];
+// Build one sidebar entry's <button> (canvas + label) and return its 2D context.
+// label/sub use textContent so arbitrary torrent names can't inject markup.
+function sceneButton(key, label, sub, onClick) {
+  const item = document.createElement("button");
+  item.className = "scene";
+  item.dataset.key = key;
+  item.title = sub ? `${label} — ${sub}` : label;
 
-    const item = document.createElement("button");
-    item.className = "scene";
-    item.dataset.key = key;
-    item.title = `${meta.label} — ${meta.sub}`;
+  const cv = document.createElement("canvas");
+  cv.className = "thumb";
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = THUMB_W * dpr; cv.height = THUMB_H * dpr;
+  cv.style.width = THUMB_W + "px"; cv.style.height = THUMB_H + "px";
+  const tctx = cv.getContext("2d");
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const cv = document.createElement("canvas");
-    cv.className = "thumb";
-    const dpr = window.devicePixelRatio || 1;
-    cv.width = THUMB_W * dpr; cv.height = THUMB_H * dpr;
-    cv.style.width = THUMB_W + "px"; cv.style.height = THUMB_H + "px";
-    const tctx = cv.getContext("2d");
-    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const lab = document.createElement("div");
+  lab.className = "scene-label";
+  const strong = document.createElement("strong");
+  strong.textContent = label;
+  const span = document.createElement("span");
+  span.textContent = sub || "";
+  lab.append(strong, span);
 
-    const lab = document.createElement("div");
-    lab.className = "scene-label";
-    lab.innerHTML = `<strong>${meta.label}</strong><span>${meta.sub}</span>`;
+  item.append(cv, lab);
+  item.addEventListener("click", onClick);
+  el("sidebar").appendChild(item);
+  return tctx;
+}
 
-    item.append(cv, lab);
-    item.addEventListener("click", () => activate(key));
-    bar.appendChild(item);
+function buildSidebar() {
+  if (liveAvailable) {
+    liveThumbIds = [];
+    el("sidebar").innerHTML = "";
+    disposeThumbs();
+    syncTorrentWindows(liveSource.poll().torrents || []);   // fills in once polls land
+  } else {
+    buildScenarioSidebar();
+  }
+}
 
-    // mini-fire source + its own state
+// Live mode: a window per real torrent, each its own live mini-fire. Rebuild
+// only when the set of torrent ids actually changes (cheap no-op otherwise).
+function syncTorrentWindows(torrents) {
+  const ids = torrents.map((t) => t.id);
+  const same = ids.length === liveThumbIds.length && ids.every((id, i) => id === liveThumbIds[i]);
+  if (same) { updateSidebarActive(); return; }
+  liveThumbIds = ids;
+
+  el("sidebar").innerHTML = "";
+  disposeThumbs();
+  for (const t of torrents) {
+    const key = `torrent-${t.id}`;
+    const tctx = sceneButton(key, t.name, "", () => selectTorrent(t.id));
     const state = makeFireState();
-    let src;
-    if (key === "live") {
-      src = liveSource;
-      state.maxRateMBs = 5;
-    } else {
-      const sc = SCENARIOS[key];
-      state.maxRateMBs = sc.maxRate;
-      src = new SimulatedSource({
-        duration: 300, sizeGB: sc.size, name: sc.name,
-        rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
-        arc: sc.arc, profile: sc.profile,
-      });
-      src._start = performance.now() / 1000 - (sc.arc ? 150 : 120);   // mid-download (peak for arc, plateau for flameout)
-      for (let i = 0; i < 160; i++) draw(tctx, src.poll(), i, THUMB_W, THUMB_H, state); // warm up
-    }
+    state.maxRateMBs = 5;
+    const src = new LiveSource();
+    src.setId(t.id);
+    thumbs.push({ key, ctx: tctx, src, state, frame: 0, W: THUMB_W, H: THUMB_H });
+  }
+  updateSidebarActive();
+}
+
+function buildScenarioSidebar() {
+  el("sidebar").innerHTML = "";
+  disposeThumbs();
+  for (const key of PRESET_ORDER) {
+    const sc = SCENARIOS[key];
+    const tctx = sceneButton(key, sc.label, sc.sub, () => activate(key));
+    const state = makeFireState();
+    state.maxRateMBs = sc.maxRate;
+    const src = new SimulatedSource({
+      duration: 300, sizeGB: sc.size, name: sc.name,
+      rateBand: sc.rateBand, seedBand: sc.seedBand, seedBias: sc.seedBias, upBand: sc.upBand,
+      arc: sc.arc, profile: sc.profile,
+    });
+    src._start = performance.now() / 1000 - (sc.arc ? 150 : 120);   // mid-download (peak for arc, plateau for flameout)
+    for (let i = 0; i < 160; i++) draw(tctx, src.poll(), i, THUMB_W, THUMB_H, state); // warm up
     thumbs.push({ key, ctx: tctx, src, state, frame: 160, W: THUMB_W, H: THUMB_H });
   }
   updateSidebarActive();
 }
 
 function updateSidebarActive() {
+  const activeKey = isLive() ? `torrent-${currentTorrentId}` : cfg.scenario;
   for (const item of document.querySelectorAll(".scene")) {
-    item.classList.toggle("active", item.dataset.key === cfg.scenario);
+    item.classList.toggle("active", item.dataset.key === activeKey);
   }
 }
 

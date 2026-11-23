@@ -46,6 +46,11 @@ export class LiveSource {
     this._tick();
   }
 
+  // Stop polling — call when a per-torrent thumbnail is torn down.
+  dispose() {
+    clearInterval(this._timer);
+  }
+
   async _tick() {
     try {
       const r = await fetch(this.url, { cache: "no-store" });
