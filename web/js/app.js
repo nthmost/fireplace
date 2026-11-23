@@ -451,6 +451,36 @@ document.addEventListener("fullscreenchange", () => {
 });
 el("fullscreen").addEventListener("click", toggleFullscreen);
 
+// Keep a TV from screensaving/sleeping while the fireplace is up. Two belt-and-
+// braces methods, since TV-browser support varies: the Screen Wake Lock API, and
+// a tiny hidden looping muted video (many TV browsers only hold off the
+// screensaver while video is actively playing). Both re-arm on returning to the
+// foreground and on the first remote press. NOTE: this can't defeat the TV's own
+// Screen Saver setting or HDMI-CEC input switching — those are TV-side.
+function keepAwake() {
+  let lock = null;
+  const acquireLock = async () => {
+    try { lock = await navigator.wakeLock?.request("screen"); } catch (_) { /* unsupported */ }
+  };
+  acquireLock();
+
+  const v = document.createElement("video");
+  v.src = "keepawake.mp4";
+  v.muted = true; v.loop = true; v.playsInline = true;
+  v.setAttribute("playsinline", ""); v.setAttribute("aria-hidden", "true");
+  // not display:none — a truly-hidden video gets paused by some browsers
+  v.style.cssText = "position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1";
+  document.body.appendChild(v);
+  const play = () => v.play().catch(() => {});
+  play();
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { acquireLock(); play(); }
+  });
+  window.addEventListener("keydown", play, { once: true });
+  window.addEventListener("pointerdown", play, { once: true });
+}
+
 // ---- boot -----------------------------------------------------------------
 (async () => {
   liveAvailable = await liveBackendAvailable();
@@ -478,6 +508,7 @@ el("fullscreen").addEventListener("click", toggleFullscreen);
       clearTimeout(ctlTimer);
       ctlTimer = setTimeout(() => document.body.classList.remove("show-controls"), 3000);
     });
+    keepAwake();
   } else {
     buildSidebar();
   }
