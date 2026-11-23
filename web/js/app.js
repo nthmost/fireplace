@@ -101,6 +101,7 @@ let navTorrents = [];
 let navIndex = 0;
 let currentTorrentId = null;         // which real torrent is the big fire (live mode)
 let pinned = false;                  // big fire locked to one torrent (no auto-drift)
+let KIOSK = false;                   // ?kiosk=1 — just the fire, no chrome (for a TV)
 let liveThumbIds = [];               // ids the sidebar windows currently represent
 const fireState = makeFireState();   // the main canvas's own particle/ratchet state
 let thumbs = [];                     // sidebar mini-fires
@@ -334,6 +335,7 @@ function buildSidebar() {
 // Live mode: a window per real torrent, each its own live mini-fire. Rebuild
 // only when the set of torrent ids actually changes (cheap no-op otherwise).
 function syncTorrentWindows(torrents) {
+  if (KIOSK) return;   // no sidebar on a TV — just the fire
   const ids = torrents.map((t) => t.id);
   const same = ids.length === liveThumbIds.length && ids.every((id, i) => id === liveThumbIds[i]);
   if (same) { updateSidebarActive(); return; }
@@ -442,7 +444,18 @@ el("fullscreen").addEventListener("click", toggleFullscreen);
     cfg.scenario = "healthy";   // no backend → can't go live
   }
   fireAudio.setMode(cfg.snd);
-  buildSidebar();
+
+  // ?kiosk=1 — ambient TV mode: nothing but the fire, filling the viewport, no
+  // Fullscreen-API gesture needed (TV browsers can't invoke it on load).
+  const kioskParam = new URLSearchParams(location.search).get("kiosk");
+  KIOSK = kioskParam != null && kioskParam !== "0" && kioskParam !== "false";
+  if (KIOSK) {
+    document.body.classList.add("kiosk");
+    fireState.fill = true;           // the fire hugs the edges, no inset box
+  } else {
+    buildSidebar();
+  }
+
   start();
   requestAnimationFrame(loop);
 })();

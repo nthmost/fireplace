@@ -65,7 +65,7 @@ main {
 .scene-label strong { font-size: 12px; color: #ffcf6b; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scene-label span { font-size: 10px; color: var(--dim); }
 
-body.fs #sidebar { display: none; }
+body.fs #sidebar, body.kiosk #sidebar { display: none; }
 
 @media (max-width: 760px) {
   body { flex-direction: column; }
@@ -128,15 +128,19 @@ body.live .panel .grid, body.live .hint { display: none; }
 .fs-btn:hover, .audio-btn:hover { color: #ffcf6b; border-color: var(--ember); }
 .audio-btn.on { color: #ffcf6b; border-color: var(--ember); }
 
-/* Fullscreen mode: nothing but the fire, a maximized square centred on black. */
-body.fs { overflow: hidden; }
-body.fs main {
+/* Fullscreen / kiosk: nothing but the fire, a maximized square centred on black.
+   .fs is the click-to-fullscreen mode; .kiosk (?kiosk=1) is the same look without
+   the Fullscreen API, for a TV browser that can't invoke it on load. */
+body.fs, body.kiosk { overflow: hidden; }
+body.fs main, body.kiosk main {
   max-width: none; width: 100vw; height: 100vh; margin: 0; padding: 0;
   display: flex; align-items: center; justify-content: center; background: #000;
 }
 body.fs .readout, body.fs #panel, body.fs #toggle-panel, body.fs footer,
-body.fs .nav, body.fs .nav-indicator, body.fs .fs-btn, body.fs .audio-btn { display: none !important; }
-body.fs .stage {
+body.fs .nav, body.fs .nav-indicator, body.fs .fs-btn, body.fs .audio-btn,
+body.kiosk .readout, body.kiosk #panel, body.kiosk #toggle-panel, body.kiosk footer,
+body.kiosk .nav, body.kiosk .nav-indicator, body.kiosk .fs-btn, body.kiosk .audio-btn { display: none !important; }
+body.fs .stage, body.kiosk .stage {
   width: min(100vw, 100vh); height: min(100vw, 100vh);
   aspect-ratio: auto; border-radius: 0; box-shadow: none;
 }
