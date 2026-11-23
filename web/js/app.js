@@ -470,6 +470,14 @@ el("fullscreen").addEventListener("click", toggleFullscreen);
   if (KIOSK) {
     document.body.classList.add("kiosk");
     fireState.fill = true;           // the fire hugs the edges, no inset box
+    // Reveal the ‹ › arrows only while the Magic-Remote pointer moves (fallback
+    // for cycling if the D-pad arrows don't reach the page).
+    let ctlTimer = null;
+    window.addEventListener("pointermove", () => {
+      document.body.classList.add("show-controls");
+      clearTimeout(ctlTimer);
+      ctlTimer = setTimeout(() => document.body.classList.remove("show-controls"), 3000);
+    });
   } else {
     buildSidebar();
   }

@@ -139,7 +139,13 @@ body.fs main, body.kiosk main {
 body.fs .readout, body.fs #panel, body.fs #toggle-panel, body.fs footer,
 body.fs .nav, body.fs .nav-indicator, body.fs .fs-btn, body.fs .audio-btn,
 body.kiosk .readout, body.kiosk #panel, body.kiosk #toggle-panel, body.kiosk footer,
-body.kiosk .nav, body.kiosk .nav-indicator, body.kiosk .fs-btn, body.kiosk .audio-btn { display: none !important; }
+body.kiosk .nav-indicator, body.kiosk .fs-btn, body.kiosk .audio-btn { display: none !important; }
+
+/* Kiosk: the D-pad ←/→ cycle torrents directly; these on-screen arrows are a
+   pointer-click fallback (Magic Remote cursor), revealed only while the pointer
+   moves so they don't mar the fire. */
+body.kiosk .nav { opacity: 0; transition: opacity 0.3s; }
+body.kiosk.show-controls .nav { opacity: 0.85; }
 body.fs .stage, body.kiosk .stage {
   width: min(100vw, 100vh); height: min(100vw, 100vh);
   aspect-ratio: auto; border-radius: 0; box-shadow: none;
