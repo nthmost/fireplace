@@ -100,6 +100,7 @@ let liveSource = null;
 let navTorrents = [];
 let navIndex = 0;
 let currentTorrentId = null;         // which real torrent is the big fire (live mode)
+let pinned = false;                  // big fire locked to one torrent (no auto-drift)
 let liveThumbIds = [];               // ids the sidebar windows currently represent
 const fireState = makeFireState();   // the main canvas's own particle/ratchet state
 let thumbs = [];                     // sidebar mini-fires
@@ -206,6 +207,15 @@ function updateReadout(r) {
 function updateNav(p) {
   navTorrents = p.torrents || [];
   navIndex = p.index || 0;
+  // The backend's no-id poll re-picks the "liveliest" torrent every second, so
+  // the big fire would drift between torrents on its own. Pin it to one as soon
+  // as we know the list — after that it only changes when YOU pick a window.
+  if (!pinned && navTorrents.length) {
+    pinned = true;
+    const id = p.id != null ? p.id : navTorrents[0].id;
+    liveSource.setId(id);
+    currentTorrentId = id;
+  }
   if (p.id != null) currentTorrentId = p.id;
   syncTorrentWindows(navTorrents);   // a window per real torrent; rebuilds on change
   const show = navTorrents.length > 1;
