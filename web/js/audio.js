@@ -165,6 +165,12 @@ export class FireAudio {
     this.bedGain.gain.setTargetAtTime(bed, t, 0.4);
   }
 
+  // Resume a context the autoplay policy left suspended — call on a user gesture
+  // (e.g. the first TV-remote press) so sound enabled at load actually plays.
+  unlock() {
+    this.ctx?.resume?.();
+  }
+
   toggle() {
     if (!this.ctx) this._init();
     this.enabled = !this.enabled;

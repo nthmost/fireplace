@@ -216,6 +216,7 @@ function updateNav(p) {
     const id = p.id != null ? p.id : navTorrents[0].id;
     liveSource.setId(id);
     currentTorrentId = id;
+    flashKioskName(p.name);   // name the fire on a TV (no sidebar to read)
   }
   if (p.id != null) currentTorrentId = p.id;
   syncTorrentWindows(navTorrents);   // a window per real torrent; rebuilds on change
@@ -247,6 +248,23 @@ function selectTorrent(id) {
   if (i >= 0) navIndex = i;
   liveSource.setId(id);
   updateSidebarActive();
+  if (i >= 0) flashKioskName(navTorrents[i].name);   // TV: show which fire we moved to
+}
+
+// Briefly name the current fire, bottom-centre — only meaningful in kiosk/TV mode
+// where there's no sidebar. Auto-fades.
+let kioskNameEl = null, kioskNameTimer = null;
+function flashKioskName(name) {
+  if (!KIOSK || !name) return;
+  if (!kioskNameEl) {
+    kioskNameEl = document.createElement("div");
+    kioskNameEl.id = "kiosk-name";
+    document.querySelector("main").appendChild(kioskNameEl);
+  }
+  kioskNameEl.textContent = name;
+  kioskNameEl.classList.add("show");
+  clearTimeout(kioskNameTimer);
+  kioskNameTimer = setTimeout(() => kioskNameEl.classList.remove("show"), 2800);
 }
 
 el("nav-prev").addEventListener("click", () => cycle(-1));
@@ -457,5 +475,20 @@ el("fullscreen").addEventListener("click", toggleFullscreen);
   }
 
   start();
+
+  // Sound defaults ON in kiosk (a fireplace should crackle), OFF otherwise;
+  // override either way with ?sound=1 / ?sound=0. The AudioContext may start
+  // suspended under the autoplay policy, so also resume on the first user gesture
+  // — on a TV that's the first ←/→ remote press, which we want anyway.
+  const soundParam = new URLSearchParams(location.search).get("sound");
+  const wantSound = soundParam != null ? (soundParam !== "0" && soundParam !== "false") : KIOSK;
+  if (wantSound) {
+    if (!fireAudio.enabled) toggleAudio();
+    const unlock = () => fireAudio.unlock();
+    unlock();
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("pointerdown", unlock, { once: true });
+  }
+
   requestAnimationFrame(loop);
 })();

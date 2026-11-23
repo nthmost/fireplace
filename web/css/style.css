@@ -145,6 +145,18 @@ body.fs .stage, body.kiosk .stage {
   aspect-ratio: auto; border-radius: 0; box-shadow: none;
 }
 
+/* Kiosk: a transient torrent-name caption shown when the fire changes (←/→ on a
+   TV remote), since there's no sidebar to read. Fades itself out. */
+#kiosk-name {
+  position: fixed; bottom: 6vh; left: 50%; transform: translateX(-50%);
+  max-width: 82vw; padding: 10px 22px; border-radius: 10px; z-index: 5;
+  background: rgba(10, 6, 4, 0.72); border: 1px solid var(--stone);
+  color: #ffcf6b; font-size: clamp(16px, 2.3vw, 30px); letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transition: opacity 0.45s; pointer-events: none;
+}
+#kiosk-name.show { opacity: 1; }
+
 .readout { margin: 16px auto 0; max-width: 560px; }
 
 .pct-row { display: flex; align-items: center; gap: 12px; }
