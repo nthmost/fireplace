@@ -515,6 +515,13 @@ function keepAwake() {
 
   start();
 
+  // ?start=1 — resume paused torrents on load so lighting the fireplace actually
+  // makes the fire burn (the "Fireplace" HA button points here). Needs the live
+  // backend; harmless/no-op on the static demo.
+  if (liveAvailable && new URLSearchParams(location.search).get("start") === "1") {
+    fetch("/api/start", { method: "POST" }).catch(() => {});
+  }
+
   // Sound defaults ON in kiosk (a fireplace should crackle), OFF otherwise;
   // override either way with ?sound=1 / ?sound=0. The AudioContext may start
   // suspended under the autoplay policy, so also resume on the first user gesture

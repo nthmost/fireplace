@@ -204,6 +204,11 @@ class TransmissionSource(ProgressSource):
         return [{"id": t["id"], "name": t["name"]}
                 for t in out["arguments"]["torrents"]]
 
+    def start_all(self) -> None:
+        """Resume every torrent (RPC ``torrent-start`` with no ids = all). Lets a
+        'light the fire' action wake paused torrents so the fire actually burns."""
+        self._call({"method": "torrent-start"})
+
     def _call(self, body: dict) -> dict:
         data = json.dumps(body).encode()
         for attempt in (0, 1):  # retry once to pick up a fresh session id

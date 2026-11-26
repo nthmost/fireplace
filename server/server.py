@@ -65,6 +65,25 @@ class Handler(SimpleHTTPRequestHandler):
             return self._progress()
         return super().do_GET()
 
+    def do_POST(self):  # noqa: N802
+        if self.path.split("?", 1)[0] == "/api/start":
+            return self._start()
+        self.send_error(404)
+
+    def _start(self):
+        """Resume all torrents (so lighting the fireplace wakes paused torrents)."""
+        try:
+            with _lock:
+                SOURCE.start_all()
+            body, code = b'{"started": true}', 200
+        except Exception as e:  # keep serving; the page just shows whatever's there
+            body, code = json.dumps({"error": str(e)}).encode(), 503
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _progress(self):
         try:
             q = parse_qs(urlparse(self.path).query)
